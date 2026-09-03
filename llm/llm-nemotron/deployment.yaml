@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-nemotron
+  namespace: llm
+  labels:
+    app: llm-nemotron
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: llm-nemotron
+  template:
+    metadata:
+      labels:
+        app: llm-nemotron
+    spec:
+      nodeSelector:
+        gpu.family: strix-halo
+      containers:
+      - name: llama-server
+        image: ghcr.io/ggml-org/llama.cpp:server-rocm
+        imagePullPolicy: IfNotPresent
+        command:
+        - /app/llama-server
+        args:
+        - --hf-repo
+        - unsloth/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF
+        - --hf-file
+        - NVIDIA-Nemotron-3.5-Lightning-30B-A3B-Q8_0.gguf
+        - -c
+        - "65536"
+        - -ngl
+        - "99"
+        - -fa
+        - "on"
+        - -np
+        - "2"
+        - --reasoning-budget
+        - "8192"
+        - --timeout
+        - "120"
+        - --host
+        - 0.0.0.0
+        - --port
+        - "8000"
+        - --alias
+        - nvidia/Nemotron-3.5-Lightning-30B-A3B
+        - --metrics
+        env:
+        - name: HSA_OVERRIDE_GFX_VERSION
+          value: "11.5.1"
+        - name: HIP_VISIBLE_DEVICES
+          value: "0"
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token-secret
+              key: token
+        - name: LLAMA_CACHE
+          value: "/root/.cache/llama.cpp"
+        ports:
+        - containerPort: 8000
+          name: http
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          failureThreshold: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+        - mountPath: /dev/kfd
+          name: dev-kfd
+        - mountPath: /dev/dri
+          name: dev-dri
+        - mountPath: /root/.cache/llama.cpp
+          name: hf-cache
+        - mountPath: /root/.cache/huggingface
+          name: hf-cache
+        resources:
+          requests:
+            cpu: "4"
+            memory: "40Gi"
+          limits:
+            cpu: "16"
+            memory: "52Gi"
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Gi
+      - name: dev-kfd
+        hostPath:
+          path: /dev/kfd
+      - name: dev-dri
+        hostPath:
+          path: /dev/dri
+      - name: hf-cache
+        hostPath:
+          path: /var/lib/rancher/k3s/storage/hf-cache
+          type: DirectoryOrCreate

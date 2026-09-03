@@ -1,0 +1,98 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'servers'
+    scheme: http
+    static_configs:
+      - targets: ['192.168.2.4:9100']
+        labels:
+          instance: 'margarita'
+          nodename: 'margarita'
+      - targets: ['192.168.2.3:9100']
+        labels:
+          instance: 'shaker'
+          nodename: 'shaker'
+      - targets: ['192.168.2.2:9100']
+        labels:
+          instance: 'bar-back'
+          nodename: 'bar-back'
+
+  - job_name: 'server-applications'
+    scheme: http
+    static_configs:
+      - targets: ['192.168.2.4:9099']
+        labels:
+          instance: 'traefik-docker'
+          nodename: 'traefik-docker'
+          app: 'traefik'
+      - targets: ['llm-router-service.llm:4000']
+        labels:
+          instance: 'llm-router'
+          nodename: 'rocks'
+          app: 'llm-router'
+
+  - job_name: 'llm models'
+    scheme: http
+    static_configs:
+      - targets: ['llm-nemotron-service.llm:8000']
+        labels:
+          instance: 'llm-nemotron'
+          model: 'nvidia/Nemotron-3.5-Lightning-30B-A3B'
+          app: 'llm-nemotron'
+      - targets: ['llm-gemma26b-service.llm:8000']
+        labels:
+          instance: 'llm-gemma26b'
+          model: 'google/gemma-4-26B-A4B-it'
+          app: 'llm-gemma26b'
+      - targets: ['llm-gemma12b-service.llm:8000']
+        labels:
+          instance: 'llm-gemma12b'
+          model: 'google/gemma-4-12b-it'
+          app: 'llm-gemma12b'
+      - targets: ['llm-qwen36-service.llm:8000']
+        labels:
+          instance: 'llm-qwen36'
+          model: 'Qwen/Qwen3.6-35B-A3B'
+          app: 'llm-qwen36'
+
+  - job_name: 'docker'
+    scheme: http
+    static_configs:
+      - targets: ['192.168.2.4:9323']
+        labels:
+          instance: 'margarita'
+          nodename: 'margarita'
+
+  - job_name: 'kubernetes-nodes'
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      insecure_skip_verify: true
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+
+  - job_name: 'k3s'
+    scheme: http
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - source_labels: [__address__]
+        regex: '(.*):10250'
+        replacement: '${1}:9100'
+        target_label: __address__
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: instance
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: nodename

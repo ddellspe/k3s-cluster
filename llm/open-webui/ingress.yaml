@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: open-webui-ingress
+  namespace: llm
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: chat.ddellspe.dev
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: open-webui-service
+            port:
+              number: 8080
+  - host: chat.ddellspe.net
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: open-webui-service
+            port:
+              number: 8080
+  tls:
+  - hosts:
+    - chat.ddellspe.dev
+    secretName: ddellspe-tls

@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: playwright
+  namespace: llm
+  labels:
+    app: playwright
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: playwright
+  template:
+    metadata:
+      labels:
+        app: playwright
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: rocks
+      containers:
+      - name: playwright
+        image: mcr.microsoft.com/playwright/python:v1.60.0-noble
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - "pip install --no-cache-dir playwright==1.60.0 && python3 -m playwright run-server --port 3000 --host 0.0.0.0"
+        ports:
+        - containerPort: 3000
+          name: ws
+        env:
+        - name: PLAYWRIGHT_BROWSERS_PATH
+          value: "/ms-playwright"
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+        startupProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 30
+        readinessProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 1Gi

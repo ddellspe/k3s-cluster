@@ -1,0 +1,44 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: llm-router-ingress
+  namespace: llm
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: llm.ddellspe.dev
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: llm-router-service
+            port:
+              number: 4000
+  - host: vllm.ddellspe.dev
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: llm-router-service
+            port:
+              number: 4000
+  - host: router.ddellspe.dev
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: llm-router-service
+            port:
+              number: 4000
+  tls:
+  - hosts:
+    - llm.ddellspe.dev
+    - vllm.ddellspe.dev
+    - router.ddellspe.dev
+    secretName: ddellspe-tls

@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-router
+  namespace: llm
+  labels:
+    app: llm-router
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: llm-router
+  template:
+    metadata:
+      labels:
+        app: llm-router
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: rocks
+      containers:
+      - name: litellm-router
+        image: ghcr.io/berriai/litellm:main-latest
+        imagePullPolicy: IfNotPresent
+        args:
+        - --config
+        - /app/config.yaml
+        - --port
+        - "4000"
+        env:
+        - name: LITELLM_LOCAL_MODEL_COST_MAP
+          value: "True"
+        - name: DISABLE_SCHEMA_UPDATE
+          value: "True"
+        ports:
+        - containerPort: 4000
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /health/readiness
+            port: 4000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 10
+        livenessProbe:
+          httpGet:
+            path: /health/liveness
+            port: 4000
+          initialDelaySeconds: 45
+          periodSeconds: 15
+          failureThreshold: 8
+        volumeMounts:
+        - mountPath: /app/config.yaml
+          name: config-volume
+          subPath: config.yaml
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+      volumes:
+      - name: config-volume
+        configMap:
+          name: llm-router-config

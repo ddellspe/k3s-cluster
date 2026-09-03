@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: searxng-service
+  namespace: llm
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+  selector:
+    app: searxng

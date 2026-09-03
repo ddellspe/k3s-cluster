@@ -1,0 +1,46 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: k3s-plan-auto-updater
+  namespace: system-upgrade
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    metadata: {}
+    spec:
+      template:
+        metadata: {}
+        spec:
+          containers:
+          - command:
+            - /bin/sh
+            - -c
+            - "set -e\necho \"Checking latest K3s stable release tag from GitHub...\"\
+              \nLATEST_TAG=$(curl -sL -H \"User-Agent: kubectl\" https://api.github.com/repos/k3s-io/k3s/releases/latest\
+              \ | jq -r .tag_name)\nif [ -z \"$LATEST_TAG\" ] || [ \"$LATEST_TAG\"\
+              \ = \"null\" ]; then\n  echo \"Error: Unable to fetch latest release\
+              \ tag\"\n  exit 1\nfi\necho \"Latest stable release found: $LATEST_TAG\"\
+              \n\nCURRENT_VERSION=$(kubectl get plan k3s-server -n system-upgrade\
+              \ -o jsonpath='{.spec.version}' 2>/dev/null || echo \"\")\necho \"Current\
+              \ plan version: $CURRENT_VERSION\"\n\nif [ \"$LATEST_TAG\" != \"$CURRENT_VERSION\"\
+              \ ]; then\n  echo \"Patching k3s-server Plan to version $LATEST_TAG...\"\
+              \n  kubectl patch plan k3s-server -n system-upgrade --type=merge -p\
+              \ \"{\\\"spec\\\":{\\\"version\\\":\\\"$LATEST_TAG\\\"}}\"\n  echo \"\
+              Plan updated successfully!\"\nelse\n  echo \"k3s-server Plan is already\
+              \ up to date ($CURRENT_VERSION).\"\nfi\n"
+            image: alpine/k8s:1.36.4
+            imagePullPolicy: IfNotPresent
+            name: updater
+            resources: {}
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+          restartPolicy: OnFailure
+          schedulerName: default-scheduler
+          securityContext: {}
+          serviceAccount: system-upgrade
+          serviceAccountName: system-upgrade
+          terminationGracePeriodSeconds: 30
+  schedule: 0 2 * * 0
+  successfulJobsHistoryLimit: 3
+  suspend: false

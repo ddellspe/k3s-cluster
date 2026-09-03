@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  ddellspe.server: |
+    ddellspe.net:53 {
+        errors
+        template IN A ddellspe.net {
+            match .*\..*\.ddellspe\.net\.?$
+            rcode NXDOMAIN
+            fallthrough
+        }
+        template IN AAAA ddellspe.net {
+            match .*\..*\.ddellspe\.net\.?$
+            rcode NXDOMAIN
+            fallthrough
+        }
+        forward . /etc/resolv.conf
+    }
+    ddellspe.dev:53 {
+        errors
+        template IN A ddellspe.dev {
+            match .*\..*\.ddellspe\.dev\.?$
+            rcode NXDOMAIN
+            fallthrough
+        }
+        template IN AAAA ddellspe.dev {
+            match .*\..*\.ddellspe\.dev\.?$
+            rcode NXDOMAIN
+            fallthrough
+        }
+        forward . /etc/resolv.conf
+    }

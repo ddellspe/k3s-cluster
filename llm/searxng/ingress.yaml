@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: searxng-ingress
+  namespace: llm
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: searxng.ddellspe.dev
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: searxng-service
+            port:
+              number: 8080
+  tls:
+  - hosts:
+    - searxng.ddellspe.dev
+    secretName: ddellspe-tls

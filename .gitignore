@@ -1,0 +1,22 @@
+# Conversation & Assistant History
+.conversation/
+
+# Local Secrets Staging (Never commit raw tokens or certificates)
+.secrets/
+*.key
+*.pem
+*.pfx
+
+# OS / Editor Artifacts
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Temporary / Log files
+*.log
+tmp/
+scratch/
