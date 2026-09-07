@@ -1,0 +1,13 @@
+# Helm Chart: caretta/caretta
+# Repository: https://helm.groundcover.com
+# Version: 0.0.17
+# Namespace: monitoring
+#
+# Installation:
+#   helm repo add caretta https://helm.groundcover.com
+#   helm repo update
+#   helm upgrade --install caretta caretta/caretta --namespace monitoring -f values.yaml
+
+resources:
+  limits:
+    memory: 512Mi

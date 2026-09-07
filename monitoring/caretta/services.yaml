@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: caretta-grafana
+  namespace: monitoring
+  labels:
+    helm.sh/chart: grafana-6.48.0
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: caretta
+    app.kubernetes.io/version: 9.3.1
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - name: service
+    port: 80
+    protocol: TCP
+    targetPort: 3000
+  selector:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: caretta
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: monitoring
+  labels:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-single
+    app.kubernetes.io/instance: caretta
+    helm.sh/chart: victoria-metrics-single-0.8.48
+    app.kubernetes.io/managed-by: Helm
+  name: caretta-vm
+spec:
+  clusterIP: None
+  ports:
+  - name: http
+    port: 8428
+    protocol: TCP
+    targetPort: http
+  selector:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-single
+    app.kubernetes.io/instance: caretta

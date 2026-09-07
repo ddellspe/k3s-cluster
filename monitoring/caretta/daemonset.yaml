@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: caretta
+  labels:
+    app: caretta
+    helm.sh/chart: caretta-0.0.17
+    app.kubernetes.io/name: caretta
+    app.kubernetes.io/instance: caretta
+    app.kubernetes.io/version: v0.0.17
+    app.kubernetes.io/managed-by: Helm
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: caretta
+      app.kubernetes.io/name: caretta
+      app.kubernetes.io/instance: caretta
+  template:
+    metadata:
+      annotations: null
+      labels:
+        app: caretta
+        app.kubernetes.io/name: caretta
+        app.kubernetes.io/instance: caretta
+    spec:
+      serviceAccountName: caretta
+      securityContext: {}
+      containers:
+      - name: caretta
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: true
+        image: quay.io/groundcover/caretta:v0.0.17
+        imagePullPolicy: Always
+        volumeMounts:
+        - mountPath: /proc
+          name: proc
+        - mountPath: /sys/kernel/debug
+          name: debug
+        ports:
+        - name: prom-metrics
+          containerPort: 7117
+          protocol: TCP
+        env:
+        - name: RESOLVE_DNS
+          value: 'true'
+        - name: PROMETHEUS_PORT
+          value: '7117'
+        - name: PROMETHEUS_ENDPOINT
+          value: /metrics
+        - name: POLL_INTERVAL
+          value: '5'
+        resources:
+          limits:
+            cpu: 150m
+            memory: 512Mi
+          requests:
+            cpu: 10m
+            memory: 50Mi
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/control-plane
+        operator: Exists
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+        operator: Exists
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: debug
+        hostPath:
+          path: /sys/kernel/debug

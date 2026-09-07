@@ -7,6 +7,7 @@ metadata:
     app: open-webui
 spec:
   replicas: 1
+  progressDeadlineSeconds: 1200
   strategy:
     type: Recreate
   selector:
@@ -22,7 +23,7 @@ spec:
       containers:
       - name: open-webui
         image: ghcr.io/open-webui/open-webui:main
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http
@@ -55,21 +56,26 @@ spec:
           httpGet:
             path: /health
             port: 8080
-          initialDelaySeconds: 15
+          initialDelaySeconds: 30
           periodSeconds: 10
-          failureThreshold: 30
+          timeoutSeconds: 5
+          failureThreshold: 60
         readinessProbe:
           httpGet:
             path: /health
             port: 8080
-          initialDelaySeconds: 10
+          initialDelaySeconds: 15
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
         livenessProbe:
           httpGet:
             path: /health
             port: 8080
-          initialDelaySeconds: 20
+          initialDelaySeconds: 45
           periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 6
         resources:
           requests:
             cpu: 250m

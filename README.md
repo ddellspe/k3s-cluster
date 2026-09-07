@@ -47,6 +47,16 @@ k3s-cluster/
 │       └── kustomization.yaml
 ├── monitoring/
 │   ├── kustomization.yaml                 # Aggregated monitoring kustomization
+│   ├── caretta/                           # Caretta eBPF K8s network & service map (DaemonSet, VM, Grafana)
+│   │   ├── daemonset.yaml
+│   │   ├── statefulset-vm.yaml
+│   │   ├── deployment-grafana.yaml
+│   │   ├── services.yaml
+│   │   ├── configmaps.yaml
+│   │   ├── secret.yaml
+│   │   ├── rbac.yaml
+│   │   ├── values.yaml
+│   │   └── kustomization.yaml
 │   ├── grafana/                           # Grafana (Datasources, PVC, Deployment, Service, Ingress)
 │   │   ├── datasources.yaml
 │   │   ├── pvc.yaml
@@ -82,7 +92,7 @@ k3s-cluster/
 | Namespace | Workloads | Domain / Endpoint |
 | :--- | :--- | :--- |
 | **`llm`** | Nemotron 3.5 (GGUF), Gemma 4 (GGUF), Qwen 3.6, LiteLLM Router, Open WebUI, SearXNG, Playwright | `chat.ddellspe.dev`, `llm.ddellspe.dev`, `searxng.ddellspe.dev` |
-| **`monitoring`** | Prometheus Server, Grafana, Node Exporter | `grafana.ddellspe.dev`, `prometheus.ddellspe.dev` |
+| **`monitoring`** | Prometheus Server, Grafana, Node Exporter, Caretta (eBPF Service Map) | `grafana.ddellspe.dev`, `prometheus.ddellspe.dev` |
 | **`radar`** | Radar Kubernetes Dashboard | `radar.ddellspe.dev` |
 | **`kube-system`** | CoreDNS custom configuration (`coredns-custom`) | Cluster-wide DNS routing |
 | **`system-upgrade`**| system-upgrade-controller, auto-updater cron | Automated weekly K3s version upgrades |

@@ -1,0 +1,272 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caretta-grafana
+  namespace: monitoring
+  labels:
+    helm.sh/chart: grafana-6.48.0
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: caretta
+    app.kubernetes.io/version: 9.3.1
+    app.kubernetes.io/managed-by: Helm
+data:
+  grafana.ini: '[analytics]
+
+    check_for_updates = true
+
+    [auth.anonymous]
+
+    enabled = true
+
+    [dashboards]
+
+    default_home_dashboard_path = /var/lib/grafana/dashboards/default/dashboard.json
+
+    [grafana_net]
+
+    url = https://grafana.net
+
+    [log]
+
+    mode = console
+
+    [paths]
+
+    data = /var/lib/grafana/
+
+    logs = /var/log/grafana
+
+    plugins = /var/lib/grafana/plugins
+
+    provisioning = /etc/grafana/provisioning
+
+    [server]
+
+    domain = ''''
+
+    '
+  datasources.yaml: "apiVersion: 1\ndatasources:\n- access: proxy\n  editable: \"\
+    true\"\n  name: Prometheus\n  type: prometheus\n  url: http://caretta-vm:8428\n"
+  dashboardproviders.yaml: "apiVersion: 1\nproviders:\n- disableDeletion: false\n\
+    \  editable: true\n  folder: \"\"\n  name: default\n  options:\n    foldersFromFilesStructure:\
+    \ true\n    path: /var/lib/grafana/dashboards\n  orgId: 1\n  type: file\n"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caretta-vm-scrapeconfig
+  namespace: monitoring
+  labels:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-single
+    app.kubernetes.io/instance: caretta
+    helm.sh/chart: victoria-metrics-single-0.8.48
+    app.kubernetes.io/managed-by: Helm
+data:
+  scrape.yml: "\nglobal:\n  scrape_interval: 15s\n\nscrape_configs:\n- job_name: caretta\n\
+    \  kubernetes_sd_configs:\n  - namespaces:\n      own_namespace: true\n    role:\
+    \ pod\n  metrics_path: /metrics\n  relabel_configs:\n  - action: keep\n    regex:\
+    \ caretta\n    replacement: $1\n    separator: ;\n    source_labels:\n    - __meta_kubernetes_pod_label_app\n\
+    \  - action: labelmap\n    regex: __meta_kubrnetes_pod_label_(.+)\n  - action:\
+    \ replace\n    source_labels:\n    - __meta_kubernetes_pod_name\n    target_label:\
+    \ caretta_pod\n  - action: replace\n    source_labels:\n    - __meta_kubernetes_pod_node_name\n\
+    \    target_label: caretta_node\n  scrape_interval: 5s\n"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caretta-grafana-dashboards
+  namespace: monitoring
+data:
+  dashboard.json: "{\n  \"annotations\": {\n    \"list\": [\n      {\n        \"builtIn\"\
+    : 1,\n        \"datasource\": {\n          \"type\": \"grafana\",\n          \"\
+    uid\": \"-- Grafana --\"\n        },\n        \"enable\": true,\n        \"hide\"\
+    : true,\n        \"iconColor\": \"rgba(0, 211, 255, 1)\",\n        \"name\": \"\
+    Annotations & Alerts\",\n        \"target\": {\n          \"limit\": 100,\n  \
+    \        \"matchAny\": false,\n          \"tags\": [],\n          \"type\": \"\
+    dashboard\"\n        },\n        \"type\": \"dashboard\"\n      }\n    ]\n  },\n\
+    \  \"editable\": true,\n  \"fiscalYearStartMonth\": 0,\n  \"graphTooltip\": 0,\n\
+    \  \"id\": 2,\n  \"links\": [],\n  \"liveNow\": false,\n  \"panels\": [\n    {\n\
+    \      \"datasource\": {\n        \"type\": \"prometheus\",\n        \"uid\":\
+    \ \"PBFA97CFB590B2093\"\n      },\n      \"gridPos\": {\n        \"h\": 24,\n\
+    \        \"w\": 17,\n        \"x\": 0,\n        \"y\": 0\n      },\n      \"id\"\
+    : 2,\n      \"interval\": \"15s\",\n      \"options\": {\n        \"nodes\": {\n\
+    \          \"arcs\": [\n            {\n              \"color\": \"#5794F2\",\n\
+    \              \"field\": \"arc__color\"\n            }\n          ]\n       \
+    \ }\n      },\n      \"targets\": [\n        {\n          \"datasource\": {\n\
+    \            \"type\": \"prometheus\",\n            \"uid\": \"PBFA97CFB590B2093\"\
+    \n          },\n          \"editorMode\": \"code\",\n          \"exemplar\": false,\n\
+    \          \"expr\": \"increase((sum by (id, title, subTitle, detail__kind, arc__color)\
+    \ (label_replace((label_replace(label_replace(label_replace(label_replace((caretta_links_observed{client_namespace=~\\\
+    \"$namespace\\\", client_kind=~\\\"$kind\\\", client_name=~\\\"$workload\\\",\
+    \ server_port=~\\\"$port\\\"} or caretta_links_observed{server_namespace=~\\\"\
+    $namespace\\\", server_kind=~\\\"$kind\\\", server_name=~\\\"$workload\\\", server_port=~\\\
+    \"$port\\\"}), \\\"detail__kind\\\", \\\"$1\\\", \\\"server_kind\\\", \\\"(.*)\\\
+    \"), \\\"subTitle\\\", \\\"$1\\\", \\\"server_namespace\\\", \\\"(.*)\\\"), \\\
+    \"title\\\", \\\"$1\\\", \\\"server_name\\\", \\\"(.*)\\\"), \\\"id\\\", \\\"\
+    $1\\\", \\\"server_id\\\", \\\"(.*)\\\") or label_replace(label_replace(label_replace(label_replace((caretta_links_observed{client_namespace=~\\\
+    \"$namespace\\\", client_kind=~\\\"$kind\\\", client_name=~\\\"$workload\\\",\
+    \ server_port=~\\\"$port\\\"} or caretta_links_observed{server_namespace=~\\\"\
+    $namespace\\\", server_kind=~\\\"$kind\\\", server_name=~\\\"$workload\\\", server_port=~\\\
+    \"$port\\\"}), \\\"detail__kind\\\", \\\"$1\\\", \\\"client_kind\\\", \\\"(.*)\\\
+    \"), \\\"subTitle\\\", \\\"$1\\\", \\\"client_namespace\\\", \\\"(.*)\\\"), \\\
+    \"title\\\", \\\"$1\\\", \\\"client_name\\\", \\\"(.*)\\\"), \\\"id\\\", \\\"\
+    $1\\\", \\\"client_id\\\", \\\"(.*)\\\")  ), \\\"arc__color\\\", \\\"1\\\", \\\
+    \"link_id\\\", \\\"(.*)\\\")) )[$__range:$__interval])  > 0\",\n          \"format\"\
+    : \"table\",\n          \"instant\": true,\n          \"legendFormat\": \"__auto\"\
+    ,\n          \"range\": false,\n          \"refId\": \"nodes\"\n        },\n \
+    \       {\n          \"datasource\": {\n            \"type\": \"prometheus\",\n\
+    \            \"uid\": \"PBFA97CFB590B2093\"\n          },\n          \"editorMode\"\
+    : \"code\",\n          \"exemplar\": false,\n          \"expr\": \"increase((sum\
+    \ by (id, source, target, mainStat) ((label_replace(label_replace(label_replace(label_replace((caretta_links_observed{client_namespace=~\\\
+    \"$namespace\\\", client_kind=~\\\"$kind\\\", client_name=~\\\"$workload\\\",\
+    \ server_port=~\\\"$port\\\"} or caretta_links_observed{server_namespace=~\\\"\
+    $namespace\\\", server_kind=~\\\"$kind\\\", server_name=~\\\"$workload\\\", server_port=~\\\
+    \"$port\\\"}), \\\"id\\\", \\\"$1\\\", \\\"link_id\\\", \\\"(.*)\\\"), \\\"source\\\
+    \", \\\"$1\\\", \\\"client_id\\\", \\\"(.*)\\\"), \\\"target\\\", \\\"$1\\\",\
+    \ \\\"server_id\\\", \\\"(.*)\\\"), \\\"mainStat\\\", \\\"$1\\\", \\\"server_port\\\
+    \", \\\"(.*)\\\"))) )[$__range:$__interval]) > 0\",\n          \"format\": \"\
+    table\",\n          \"hide\": false,\n          \"instant\": true,\n         \
+    \ \"legendFormat\": \"__auto\",\n          \"range\": false,\n          \"refId\"\
+    : \"edges\"\n        }\n      ],\n      \"title\": \"Service Map \u2638\uFE0F\"\
+    ,\n      \"type\": \"nodeGraph\"\n    },\n    {\n      \"datasource\": {\n   \
+    \     \"type\": \"prometheus\",\n        \"uid\": \"PBFA97CFB590B2093\"\n    \
+    \  },\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\"\
+    : {\n            \"fixedColor\": \"blue\",\n            \"mode\": \"fixed\"\n\
+    \          },\n          \"custom\": {\n            \"hideFrom\": {\n        \
+    \      \"legend\": false,\n              \"tooltip\": false,\n              \"\
+    viz\": false\n            }\n          },\n          \"links\": [],\n        \
+    \  \"mappings\": []\n        },\n        \"overrides\": []\n      },\n      \"\
+    gridPos\": {\n        \"h\": 7,\n        \"w\": 4,\n        \"x\": 17,\n     \
+    \   \"y\": 0\n      },\n      \"id\": 4,\n      \"options\": {\n        \"displayLabels\"\
+    : [\n          \"name\"\n        ],\n        \"legend\": {\n          \"displayMode\"\
+    : \"list\",\n          \"placement\": \"right\",\n          \"showLegend\": false\n\
+    \        },\n        \"pieType\": \"donut\",\n        \"reduceOptions\": {\n \
+    \         \"calcs\": [\n            \"lastNotNull\"\n          ],\n          \"\
+    fields\": \"\",\n          \"values\": false\n        },\n        \"tooltip\"\
+    : {\n          \"mode\": \"single\",\n          \"sort\": \"none\"\n        }\n\
+    \      },\n      \"targets\": [\n        {\n          \"datasource\": {\n    \
+    \        \"type\": \"prometheus\",\n            \"uid\": \"PBFA97CFB590B2093\"\
+    \n          },\n          \"editorMode\": \"code\",\n          \"expr\": \"sum\
+    \ by (server_port) (increase((caretta_links_observed{client_namespace=~\\\"$namespace\\\
+    \", client_kind=~\\\"$kind\\\", client_name=~\\\"$workload\\\", server_port=~\\\
+    \"$port\\\"} or caretta_links_observed{server_namespace=~\\\"$namespace\\\", server_kind=~\\\
+    \"$kind\\\", server_name=~\\\"$workload\\\", server_port=~\\\"$port\\\"})[$__range:$__interval]))\
+    \ > 0\",\n          \"legendFormat\": \"__auto\",\n          \"range\": true,\n\
+    \          \"refId\": \"A\"\n        }\n      ],\n      \"title\": \"Active Ports\"\
+    ,\n      \"type\": \"piechart\"\n    },\n    {\n      \"datasource\": {\n    \
+    \    \"type\": \"datasource\",\n        \"uid\": \"grafana\"\n      },\n     \
+    \ \"gridPos\": {\n        \"h\": 7,\n        \"w\": 3,\n        \"x\": 21,\n \
+    \       \"y\": 0\n      },\n      \"id\": 10,\n      \"options\": {\n        \"\
+    code\": {\n          \"language\": \"plaintext\",\n          \"showLineNumbers\"\
+    : false,\n          \"showMiniMap\": false\n        },\n        \"content\": \"\
+    <table style=\\\"width:100%; height:100%;border:0px solid black;\\\">\\n     <td\
+    \ style=\\\"text-align: center;vertical-align: middle;border:0px solid black;\
+    \ \\\">\\n<div style=\\\"text-align: center\\\">\\n<p align=\\\"center\\\">\\\
+    n  <img src=\\\"https://raw.githubusercontent.com/groundcover-com/caretta/main/images/logo.svg\\\
+    \" width=\\\"75%\\\" alt=\\\"caretta\\\" title=\\\"caretta\\\" />\\n  <h4>by <a\
+    \ href=\\\"https://www.groundcover.com\\\">groundcover</h4>\\n\\n  \\n  [![slack](https://img.shields.io/badge/slack-groundcover-yellowgreen.svg?logo=slack)](http://www.groundcover.com/join-slack)\\\
+    n  \\n</div>\\n</p>\\n</div>\\n</td>\\n</table>\\n\",\n        \"mode\": \"markdown\"\
+    \n      },\n      \"pluginVersion\": \"9.3.1\",\n      \"type\": \"text\"\n  \
+    \  },\n    {\n      \"datasource\": {\n        \"type\": \"prometheus\",\n   \
+    \     \"uid\": \"PBFA97CFB590B2093\"\n      },\n      \"fieldConfig\": {\n   \
+    \     \"defaults\": {\n          \"color\": {\n            \"fixedColor\": \"\
+    purple\",\n            \"mode\": \"continuous-blues\"\n          },\n        \
+    \  \"mappings\": [],\n          \"thresholds\": {\n            \"mode\": \"absolute\"\
+    ,\n            \"steps\": [\n              {\n                \"color\": \"green\"\
+    ,\n                \"value\": null\n              },\n              {\n      \
+    \          \"color\": \"red\",\n                \"value\": 80\n              }\n\
+    \            ]\n          },\n          \"unit\": \"Bps\"\n        },\n      \
+    \  \"overrides\": []\n      },\n      \"gridPos\": {\n        \"h\": 8,\n    \
+    \    \"w\": 7,\n        \"x\": 17,\n        \"y\": 7\n      },\n      \"id\":\
+    \ 8,\n      \"options\": {\n        \"displayMode\": \"gradient\",\n        \"\
+    minVizHeight\": 10,\n        \"minVizWidth\": 0,\n        \"orientation\": \"\
+    horizontal\",\n        \"reduceOptions\": {\n          \"calcs\": [\n        \
+    \    \"lastNotNull\"\n          ],\n          \"fields\": \"\",\n          \"\
+    values\": false\n        },\n        \"showUnfilled\": true\n      },\n      \"\
+    pluginVersion\": \"9.3.1\",\n      \"targets\": [\n        {\n          \"datasource\"\
+    : {\n            \"type\": \"prometheus\",\n            \"uid\": \"PBFA97CFB590B2093\"\
+    \n          },\n          \"editorMode\": \"code\",\n          \"exemplar\": false,\n\
+    \          \"expr\": \"topk(8, sum by (client_name) ((rate(caretta_links_observed{client_namespace=~\\\
+    \"$namespace\\\", client_kind=~\\\"$kind\\\", client_name=~\\\"$workload\\\",\
+    \ server_port=~\\\"$port\\\"}[$__range:$__interval]))))\",\n          \"format\"\
+    : \"time_series\",\n          \"instant\": true,\n          \"legendFormat\":\
+    \ \"__auto\",\n          \"range\": false,\n          \"refId\": \"A\"\n     \
+    \   }\n      ],\n      \"title\": \"Top Throughput Workloads\",\n      \"type\"\
+    : \"bargauge\"\n    },\n    {\n      \"datasource\": {\n        \"type\": \"prometheus\"\
+    ,\n        \"uid\": \"PBFA97CFB590B2093\"\n      },\n      \"description\": \"\
+    \",\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\n\
+    \            \"mode\": \"continuous-blues\"\n          },\n          \"mappings\"\
+    : [],\n          \"thresholds\": {\n            \"mode\": \"absolute\",\n    \
+    \        \"steps\": [\n              {\n                \"color\": \"green\",\n\
+    \                \"value\": null\n              },\n              {\n        \
+    \        \"color\": \"red\",\n                \"value\": 80\n              }\n\
+    \            ]\n          },\n          \"unit\": \"Bps\"\n        },\n      \
+    \  \"overrides\": []\n      },\n      \"gridPos\": {\n        \"h\": 9,\n    \
+    \    \"w\": 7,\n        \"x\": 17,\n        \"y\": 15\n      },\n      \"id\"\
+    : 6,\n      \"options\": {\n        \"colorMode\": \"background\",\n        \"\
+    graphMode\": \"area\",\n        \"justifyMode\": \"center\",\n        \"orientation\"\
+    : \"horizontal\",\n        \"reduceOptions\": {\n          \"calcs\": [\n    \
+    \        \"lastNotNull\"\n          ],\n          \"fields\": \"\",\n        \
+    \  \"values\": false\n        },\n        \"text\": {},\n        \"textMode\"\
+    : \"auto\"\n      },\n      \"pluginVersion\": \"9.3.1\",\n      \"targets\":\
+    \ [\n        {\n          \"datasource\": {\n            \"type\": \"prometheus\"\
+    ,\n            \"uid\": \"PBFA97CFB590B2093\"\n          },\n          \"editorMode\"\
+    : \"code\",\n          \"exemplar\": false,\n          \"expr\": \"topk(7, sum\
+    \ by (client_name, server_name) ( rate( (caretta_links_observed{client_namespace=~\\\
+    \"$namespace\\\", client_kind=~\\\"$kind\\\", client_name=~\\\"$workload\\\",\
+    \ server_port=~\\\"$port\\\", client_kind!~\\\"(node|external)\\\",} or caretta_links_observed{server_namespace=~\\\
+    \"$namespace\\\", server_kind=~\\\"$kind\\\", server_name=~\\\"$workload\\\",\
+    \ server_port=~\\\"$port\\\", server_kind!~\\\"(node|external)\\\"})[$__range:$__interval])\
+    \ ) )\",\n          \"format\": \"time_series\",\n          \"instant\": true,\n\
+    \          \"legendFormat\": \"{{client_name}} \u2B82 {{server_name}}\",\n   \
+    \       \"range\": false,\n          \"refId\": \"A\"\n        }\n      ],\n \
+    \     \"title\": \"Top Throughput Connections\",\n      \"type\": \"stat\"\n \
+    \   }\n  ],\n  \"schemaVersion\": 37,\n  \"style\": \"dark\",\n  \"tags\": [],\n\
+    \  \"templating\": {\n    \"list\": [\n      {\n        \"allValue\": \"(.*)\"\
+    ,\n        \"current\": {\n          \"selected\": true,\n          \"text\":\
+    \ [\n            \"All\"\n          ],\n          \"value\": [\n            \"\
+    $__all\"\n          ]\n        },\n        \"datasource\": {\n          \"type\"\
+    : \"prometheus\",\n          \"uid\": \"PBFA97CFB590B2093\"\n        },\n    \
+    \    \"definition\": \"query_result(caretta_links_observed)\",\n        \"hide\"\
+    : 0,\n        \"includeAll\": true,\n        \"multi\": true,\n        \"name\"\
+    : \"namespace\",\n        \"options\": [],\n        \"query\": {\n          \"\
+    query\": \"query_result(caretta_links_observed)\",\n          \"refId\": \"StandardVariableQuery\"\
+    \n        },\n        \"refresh\": 1,\n        \"regex\": \"/.*_namespace=\\\"\
+    ([^\\\"]*).*/\",\n        \"skipUrlSync\": false,\n        \"sort\": 1,\n    \
+    \    \"type\": \"query\"\n      },\n      {\n        \"allValue\": \"(.*)\",\n\
+    \        \"current\": {\n          \"selected\": true,\n          \"text\": [\n\
+    \            \"All\"\n          ],\n          \"value\": [\n            \"$__all\"\
+    \n          ]\n        },\n        \"datasource\": {\n          \"type\": \"prometheus\"\
+    ,\n          \"uid\": \"PBFA97CFB590B2093\"\n        },\n        \"definition\"\
+    : \"query_result(caretta_links_observed)\",\n        \"hide\": 0,\n        \"\
+    includeAll\": true,\n        \"multi\": true,\n        \"name\": \"kind\",\n \
+    \       \"options\": [],\n        \"query\": {\n          \"query\": \"query_result(caretta_links_observed)\"\
+    ,\n          \"refId\": \"StandardVariableQuery\"\n        },\n        \"refresh\"\
+    : 1,\n        \"regex\": \"/.*_kind=\\\"([^\\\"]*).*/\",\n        \"skipUrlSync\"\
+    : false,\n        \"sort\": 0,\n        \"type\": \"query\"\n      },\n      {\n\
+    \        \"allValue\": \"(.*)\",\n        \"current\": {\n          \"selected\"\
+    : true,\n          \"text\": [\n            \"All\"\n          ],\n          \"\
+    value\": [\n            \"$__all\"\n          ]\n        },\n        \"datasource\"\
+    : {\n          \"type\": \"prometheus\",\n          \"uid\": \"PBFA97CFB590B2093\"\
+    \n        },\n        \"definition\": \"query_result(caretta_links_observed)\"\
+    ,\n        \"hide\": 0,\n        \"includeAll\": true,\n        \"label\": \"\
+    workload\",\n        \"multi\": true,\n        \"name\": \"workload\",\n     \
+    \   \"options\": [],\n        \"query\": {\n          \"query\": \"query_result(caretta_links_observed)\"\
+    ,\n          \"refId\": \"StandardVariableQuery\"\n        },\n        \"refresh\"\
+    : 2,\n        \"regex\": \"/.*_name=\\\"([^\\\"]*).*/\",\n        \"skipUrlSync\"\
+    : false,\n        \"sort\": 1,\n        \"type\": \"query\"\n      },\n      {\n\
+    \        \"allValue\": \"(.*)\",\n        \"current\": {\n          \"selected\"\
+    : true,\n          \"text\": [\n            \"All\"\n          ],\n          \"\
+    value\": [\n            \"$__all\"\n          ]\n        },\n        \"datasource\"\
+    : {\n          \"type\": \"prometheus\",\n          \"uid\": \"PBFA97CFB590B2093\"\
+    \n        },\n        \"definition\": \"label_values(server_port)\",\n       \
+    \ \"hide\": 0,\n        \"includeAll\": true,\n        \"label\": \"server port\"\
+    ,\n        \"multi\": true,\n        \"name\": \"port\",\n        \"options\"\
+    : [],\n        \"query\": {\n          \"query\": \"label_values(server_port)\"\
+    ,\n          \"refId\": \"StandardVariableQuery\"\n        },\n        \"refresh\"\
+    : 1,\n        \"regex\": \"\",\n        \"skipUrlSync\": false,\n        \"sort\"\
+    : 0,\n        \"type\": \"query\"\n      }\n    ]\n  },\n  \"time\": {\n    \"\
+    from\": \"now-5m\",\n    \"to\": \"now\"\n  },\n  \"timepicker\": {},\n  \"timezone\"\
+    : \"\",\n  \"title\": \"Caretta Dashboard\",\n  \"uid\": \"k0Om62pVf\",\n  \"\
+    version\": 1,\n  \"weekStart\": \"\"\n}"
