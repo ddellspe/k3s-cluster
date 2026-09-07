@@ -1,39 +1,37 @@
 model_list:
-  - model_name: nvidia/Nemotron-3.5-Lightning-30B-A3B
-    litellm_params:
-      model: openai/nvidia/Nemotron-3.5-Lightning-30B-A3B
-      api_base: http://llm-nemotron-service.llm:8000/v1
-      api_key: "none"
-    model_info:
-      supports_reasoning: true
+#   - model_name: nvidia/Nemotron-3.5-Lightning-30B-A3B
+#     litellm_params:
+#       model: openai/nvidia/Nemotron-3.5-Lightning-30B-A3B
+#       api_base: http://llm-nemotron-service.llm:8000/v1
+#       api_key: "none"
+#     model_info:
+#       supports_reasoning: true
 
   - model_name: google/gemma-4-26B-A4B-it
     litellm_params:
-      model: openai/google/gemma-4-26B-A4B-it
+      model: hosted_vllm/google/gemma-4-26B-A4B-it
       api_base: http://llm-gemma26b-service.llm:8000/v1
       api_key: "none"
-      stop: ["<turn|>", "<unused49>", "</s>"]
-      max_tokens: 4096
     model_info:
       supports_reasoning: true
+      supports_function_calling: true
 
   - model_name: google/gemma-4-12b-it
     litellm_params:
-      model: openai/google/gemma-4-12b-it
+      model: hosted_vllm/google/gemma-4-12b-it
       api_base: http://llm-gemma12b-service.llm:8000/v1
       api_key: "none"
-      stop: ["<turn|>", "<unused49>", "</s>"]
-      max_tokens: 4096
     model_info:
       supports_reasoning: true
+      supports_function_calling: true
 
-  - model_name: Qwen/Qwen3.6-35B-A3B
-    litellm_params:
-      model: openai/Qwen/Qwen3.6-35B-A3B
-      api_base: http://llm-qwen36-service.llm:8000/v1
-      api_key: "none"
-    model_info:
-      supports_reasoning: true
+#   - model_name: Qwen/Qwen3.6-35B-A3B
+#     litellm_params:
+#       model: openai/Qwen/Qwen3.6-35B-A3B
+#       api_base: http://llm-qwen36-service.llm:8000/v1
+#       api_key: "none"
+#     model_info:
+#       supports_reasoning: true
 
 router_settings:
   routing_strategy: usage-based-routing-v2

@@ -1,0 +1,237 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-gemma
+  namespace: llm
+  labels:
+    app: llm-gemma
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: llm-gemma
+  template:
+    metadata:
+      labels:
+        app: llm-gemma
+    spec:
+      nodeSelector:
+        gpu.family: strix-halo
+      initContainers:
+      - name: vllm-gemma26b
+        image: docker.io/vllm/vllm-openai-rocm:latest
+        imagePullPolicy: IfNotPresent
+        restartPolicy: Always
+        command:
+        - /bin/bash
+        - -c
+        - |
+          if [ "$ENABLE_26B" = "false" ]; then
+            echo "Gemma 26B is disabled via ENABLE_26B=false. Starting dummy stub on port 8000..."
+            python3 -c "
+          import http.server, socketserver
+          class H(http.server.BaseHTTPRequestHandler):
+              def do_GET(self):
+                  self.send_response(200)
+                  self.send_header('Content-Type', 'application/json' if 'models' in self.path else 'text/plain')
+                  self.end_headers()
+                  self.wfile.write(b'{\"object\":\"list\",\"data\":[]}' if 'models' in self.path else b'OK')
+              def do_POST(self):
+                  self.send_response(503)
+                  self.send_header('Content-Type', 'application/json')
+                  self.end_headers()
+                  self.wfile.write(b'{\"error\":{\"message\":\"Gemma 26B is disabled\",\"type\":\"model_disabled\",\"code\":503}}')
+              def log_message(self, *a): pass
+          socketserver.TCPServer(('0.0.0.0', 8000), H).serve_forever()
+          "
+          else
+            echo "Starting Gemma 26B vLLM server on port 8000..."
+            exec python3 -m vllm.entrypoints.openai.api_server \
+              --model google/gemma-4-26B-A4B-it \
+              --served-model-name google/gemma-4-26B-A4B-it google/gemma-4-26b-a4b-it \
+              --trust-remote-code \
+              --port 8000 \
+              --gpu-memory-utilization 0.48 \
+              --kv-cache-memory-bytes 6G \
+              --max-model-len 32768 \
+              --tensor-parallel-size 1 \
+              --enforce-eager \
+              --disable-custom-all-reduce \
+              --enable-auto-tool-choice \
+              --tool-call-parser gemma4 \
+              --chat-template /app/vllm/examples/tool_chat_template_gemma4.jinja \
+              --reasoning-parser gemma4
+          fi
+        env:
+        - name: ENABLE_26B
+          value: "true"
+        - name: HSA_OVERRIDE_GFX_VERSION
+          value: "11.5.1"
+        - name: HIP_VISIBLE_DEVICES
+          value: "0"
+        - name: VLLM_TARGET_DEVICE
+          value: "rocm"
+        - name: TRITON_CACHE_DIR
+          value: "/root/.cache/huggingface/triton"
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token-secret
+              key: token
+        ports:
+        - containerPort: 8000
+          name: http-26b
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          failureThreshold: 60
+        readinessProbe:
+          httpGet:
+            path: /v1/models
+            port: 8000
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 15
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm-26b
+        - mountPath: /dev/kfd
+          name: dev-kfd
+        - mountPath: /dev/dri
+          name: dev-dri
+        - mountPath: /root/.cache/huggingface
+          name: hf-cache
+        resources:
+          requests:
+            cpu: "4"
+            memory: "52Gi"
+          limits:
+            cpu: "16"
+            memory: "80Gi"
+      containers:
+      - name: vllm-gemma12b
+        image: docker.io/vllm/vllm-openai-rocm:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          if [ "$ENABLE_12B" = "false" ]; then
+            echo "Gemma 12B is disabled via ENABLE_12B=false. Starting dummy stub on port 8001..."
+            python3 -c "
+          import http.server, socketserver
+          class H(http.server.BaseHTTPRequestHandler):
+              def do_GET(self):
+                  self.send_response(200)
+                  self.send_header('Content-Type', 'application/json' if 'models' in self.path else 'text/plain')
+                  self.end_headers()
+                  self.wfile.write(b'{\"object\":\"list\",\"data\":[]}' if 'models' in self.path else b'OK')
+              def do_POST(self):
+                  self.send_response(503)
+                  self.send_header('Content-Type', 'application/json')
+                  self.end_headers()
+                  self.wfile.write(b'{\"error\":{\"message\":\"Gemma 12B is disabled\",\"type\":\"model_disabled\",\"code\":503}}')
+              def log_message(self, *a): pass
+          socketserver.TCPServer(('0.0.0.0', 8001), H).serve_forever()
+          "
+          else
+            echo "Starting Gemma 12B vLLM server on port 8001..."
+            exec python3 -m vllm.entrypoints.openai.api_server \
+              --model google/gemma-4-12B-it \
+              --served-model-name google/gemma-4-12b-it google/gemma-4-12B-it \
+              --trust-remote-code \
+              --port 8001 \
+              --gpu-memory-utilization 0.28 \
+              --kv-cache-memory-bytes 8G \
+              --max-model-len 32768 \
+              --tensor-parallel-size 1 \
+              --enforce-eager \
+              --disable-custom-all-reduce \
+              --enable-auto-tool-choice \
+              --tool-call-parser gemma4 \
+              --chat-template /app/vllm/examples/tool_chat_template_gemma4.jinja \
+              --reasoning-parser gemma4
+          fi
+        env:
+        - name: ENABLE_12B
+          value: "true"
+        - name: HSA_OVERRIDE_GFX_VERSION
+          value: "11.5.1"
+        - name: HIP_VISIBLE_DEVICES
+          value: "0"
+        - name: VLLM_TARGET_DEVICE
+          value: "rocm"
+        - name: TRITON_CACHE_DIR
+          value: "/root/.cache/huggingface/triton"
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token-secret
+              key: token
+        ports:
+        - containerPort: 8001
+          name: http-12b
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          failureThreshold: 60
+        readinessProbe:
+          httpGet:
+            path: /v1/models
+            port: 8001
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          periodSeconds: 15
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm-12b
+        - mountPath: /dev/kfd
+          name: dev-kfd
+        - mountPath: /dev/dri
+          name: dev-dri
+        - mountPath: /root/.cache/huggingface
+          name: hf-cache
+        resources:
+          requests:
+            cpu: "2"
+            memory: "25Gi"
+          limits:
+            cpu: "8"
+            memory: "35Gi"
+      volumes:
+      - name: dshm-26b
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Gi
+      - name: dshm-12b
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Gi
+      - name: dev-kfd
+        hostPath:
+          path: /dev/kfd
+      - name: dev-dri
+        hostPath:
+          path: /dev/dri
+      - name: hf-cache
+        hostPath:
+          path: /var/lib/rancher/k3s/storage/hf-cache
+          type: DirectoryOrCreate

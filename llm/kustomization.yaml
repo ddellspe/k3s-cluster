@@ -7,8 +7,7 @@ resources:
   - open-webui
   - playwright
   - searxng
-  - llm-gemma26b
-  - llm-gemma12b
+  - llm-gemma
   - llm-nemotron
   - llm-qwen36
   - llm-router
