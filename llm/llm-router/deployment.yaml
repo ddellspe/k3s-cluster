@@ -16,7 +16,7 @@ spec:
         app: llm-router
     spec:
       nodeSelector:
-        kubernetes.io/hostname: rocks
+        kubernetes.io/hostname: well
       containers:
       - name: litellm-router
         image: ghcr.io/berriai/litellm:main-latest

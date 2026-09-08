@@ -18,7 +18,7 @@ spec:
         app: playwright
     spec:
       nodeSelector:
-        kubernetes.io/hostname: rocks
+        kubernetes.io/hostname: well
       containers:
       - name: playwright
         image: mcr.microsoft.com/playwright/python:v1.60.0-noble

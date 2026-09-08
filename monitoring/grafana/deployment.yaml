@@ -16,6 +16,8 @@ spec:
       labels:
         app: grafana
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: well
       containers:
       - env:
         - name: GF_SECURITY_ADMIN_USER
