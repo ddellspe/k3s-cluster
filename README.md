@@ -12,15 +12,16 @@ k3s-cluster/
 │       └── kustomization.yaml
 ├── llm/                                   # Accelerated LLM inference & AI gateway stack (namespace: llm)
 │   ├── kustomization.yaml                 # Aggregated LLM namespace kustomization
-│   ├── llm-gemma/                         # Gemma 4 26B GGUF via llama.cpp (Deployment, Service)
+│   ├── llm-gemma/                         # Dual Gemma 4 (26B + 12B) via ROCm vLLM (Deployment, Services)
 │   │   ├── deployment.yaml
-│   │   ├── service.yaml
+│   │   ├── service-12b.yaml
+│   │   ├── service-26b.yaml
 │   │   └── kustomization.yaml
 │   ├── llm-nemotron/                      # Nemotron 3.5 Lightning 30B GGUF via llama.cpp (Deployment, Service)
 │   │   ├── deployment.yaml
 │   │   ├── service.yaml
 │   │   └── kustomization.yaml
-│   ├── llm-qwen36/                        # Qwen 3.6 35B AWQ via vLLM (Deployment, Service)
+│   ├── llm-qwen36/                        # Qwen 3.6 35B A3B GGUF via llama.cpp (Deployment, Service)
 │   │   ├── deployment.yaml
 │   │   ├── service.yaml
 │   │   └── kustomization.yaml
@@ -91,7 +92,7 @@ k3s-cluster/
 
 | Namespace | Workloads | Domain / Endpoint |
 | :--- | :--- | :--- |
-| **`llm`** | Nemotron 3.5 (GGUF), Gemma 4 (GGUF), Qwen 3.6, LiteLLM Router, Open WebUI, SearXNG, Playwright | `chat.ddellspe.dev`, `llm.ddellspe.dev`, `searxng.ddellspe.dev` |
+| **`llm`** | Dual Gemma 4 (26B & 12B via vLLM), Nemotron 3.5 (GGUF), Qwen 3.6 (GGUF), LiteLLM Router, Open WebUI, SearXNG, Playwright | `chat.ddellspe.dev`, `llm.ddellspe.dev`, `searxng.ddellspe.dev` |
 | **`monitoring`** | Prometheus Server, Grafana, Node Exporter, Caretta (eBPF Service Map) | `grafana.ddellspe.dev`, `prometheus.ddellspe.dev` |
 | **`radar`** | Radar Kubernetes Dashboard | `radar.ddellspe.dev` |
 | **`kube-system`** | CoreDNS custom configuration (`coredns-custom`) | Cluster-wide DNS routing |
@@ -99,31 +100,63 @@ k3s-cluster/
 
 ## GPU Resource Management & Model Concurrency (`distiller`)
 
-The cluster's accelerated inference models run on node **`distiller`** (AMD Strix Halo APU with 128 GB unified memory).
+The cluster's accelerated inference models run on node **`distiller`** (AMD Strix Halo APU with 128 GB unified LPDDR5X memory, ~122.8 GiB allocatable).
 
-### Memory Footprint & Concurrency:
-- **`llm-nemotron`** (Nemotron 3.5 Lightning 30B `Q8_0` GGUF): ~31.7 GiB unified VRAM
-- **`llm-gemma`** (Gemma 4 26B `Q8_0` GGUF): ~26.7 GiB unified VRAM
-- **Combined Dual-Model Allocation:** ~58.4 GiB (47.1% of available GPU memory pool), leaving **over 65 GiB of free GPU headroom** on `distiller`!
+### Memory Footprint & Concurrency
+
+#### Active Dual-Model Deployment (`llm-gemma`)
+The primary deployment runs **dual Google Gemma 4 models concurrently** using native ROCm vLLM inside a single multi-container pod (`llm-gemma`):
+- **`google/gemma-4-26B-A4B-it`** (vLLM server on port `8000`):
+  - **GPU Memory Utilization:** `0.48` (~48% GPU memory)
+  - **KV Cache Buffer:** `6 GiB` (`--kv-cache-memory-bytes 6G`)
+  - **Context Window:** `32,768` tokens (`--max-model-len 32768`)
+  - **K8s Resources:** Requests `52 GiB` RAM / 4 CPU; Limits `80 GiB` RAM / 16 CPU
+- **`google/gemma-4-12B-it`** (vLLM server on port `8001`):
+  - **GPU Memory Utilization:** `0.28` (~28% GPU memory)
+  - **KV Cache Buffer:** `8 GiB` (`--kv-cache-memory-bytes 8G`)
+  - **Context Window:** `32,768` tokens (`--max-model-len 32768`)
+  - **K8s Resources:** Requests `25 GiB` RAM / 2 CPU; Limits `35 GiB` RAM / 8 CPU
+- **Combined Active Footprint:**
+  - **GPU Memory Utilization Pool:** `0.48 + 0.28 = 0.76` (~76% of Strix Halo unified VRAM pool)
+  - **Total K8s Memory Request:** `77 GiB` (62% of allocatable node memory)
+  - **Total K8s Memory Limit:** `115 GiB` (94% of allocatable node memory)
+  - **Headroom:** Leaves ~45 GiB of allocatable headroom below requests, and a ~10–13 GiB cushion at limits for the OS kernel, I/O caches, and system daemons (`node-exporter`, `caretta` eBPF).
+
+#### Standby / Alternative Models (`replicas: 0`)
+Alternative models are kept defined in the repository and cluster, but scaled to `0` by default to preserve GPU memory:
+- **`llm-nemotron`** (NVIDIA Nemotron 3.5 Lightning 30B A3B `Q8_0` GGUF):
+  - Engine: `llama.cpp` ROCm server (`ghcr.io/ggml-org/llama.cpp:server-rocm`, port `8000`)
+  - Context & Reasoning: `65,536` tokens (`-c 65536`), FlashAttention enabled (`-fa on`), `--reasoning-budget 8192`
+  - Memory Footprint: Requests `40 GiB`, Limits `52 GiB` (~31.7 GiB unified VRAM)
+- **`llm-qwen36`** (Qwen 3.6 35B A3B `MXFP4_MOE` GGUF):
+  - Engine: `llama.cpp` ROCm server (`ghcr.io/ggml-org/llama.cpp:server-rocm`, port `8000`)
+  - Context & Reasoning: `65,536` tokens (`-c 65536`), FlashAttention enabled (`-fa on`), `--reasoning-budget 8192`
+  - Memory Footprint: Requests `25 GiB`, Limits `36 GiB`
 
 ### Deployment Strategy
-- All LLM deployment manifests use `strategy.type: Recreate` so that updates to an existing deployment terminate the old pod before spinning up the new one.
+- All LLM deployment manifests use `strategy.type: Recreate` so that updates to an existing deployment terminate the old pod before spinning up the new one, preventing concurrent GPU memory contention during rollouts.
 
 ### Switching / Scaling Models
 Models can be scaled dynamically:
 
 ```bash
-# 1. Scale down a model
-kubectl scale deployment/llm-nemotron -n llm --replicas=0
+# 1. Scale down current active model
+kubectl scale deployment/llm-gemma -n llm --replicas=0
 
-# 2. Scale up or deploy a target model
-kubectl scale deployment/llm-gemma -n llm --replicas=1
-# OR deploy via Kustomize:
-# kubectl apply -k llm/llm-gemma/
+# 2. Scale up target alternative model
+kubectl scale deployment/llm-qwen36 -n llm --replicas=1
+# OR
+# kubectl scale deployment/llm-nemotron -n llm --replicas=1
 ```
 
-### LiteLLM Router Dynamic Health Checks
-The LiteLLM Router periodically probes backend `/health` endpoints (interval: 15s). When a model is scaled to `0`, LiteLLM immediately marks that backend as unavailable, preventing failed requests from hanging.
+> **Selective Toggling in `llm-gemma`:** If you want to run only one of the two Gemma models inside `llm-gemma` to free memory, set `ENABLE_26B: "false"` or `ENABLE_12B: "false"` in [`llm/llm-gemma/deployment.yaml`](llm/llm-gemma/deployment.yaml). The disabled container starts a lightweight Python HTTP stub instead of loading weights into VRAM.
+
+### LiteLLM Router Dynamic Health Checks & Routing
+- The LiteLLM Router routes between the active backends:
+  - `google/gemma-4-26B-A4B-it` via `hosted_vllm` (`http://llm-gemma26b-service.llm:8000/v1`)
+  - `google/gemma-4-12b-it` via `hosted_vllm` (`http://llm-gemma12b-service.llm:8001/v1`)
+- Both model configurations support native reasoning and function calling (`supports_reasoning: true`, `supports_function_calling: true`).
+- LiteLLM uses `usage-based-routing-v2` and dynamically probes `/health` endpoints. When a model backend is disabled or scaled down, LiteLLM marks the backend unavailable without dropping in-flight requests.
 
 ## Deployment Examples
 
