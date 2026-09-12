@@ -8,6 +8,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingress.yaml
+  - ingress-external.yaml
 
 configMapGenerator:
   - name: grafana-datasources

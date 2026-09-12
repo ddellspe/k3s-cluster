@@ -35,6 +35,7 @@ k3s-cluster/
 │   │   ├── deployment.yaml
 │   │   ├── service.yaml
 │   │   ├── ingress.yaml
+│   │   ├── ingress-external.yaml
 │   │   └── kustomization.yaml
 │   ├── playwright/                        # Playwright Headless Browser WebSocket Server (Deployment, Service)
 │   │   ├── deployment.yaml
@@ -64,6 +65,7 @@ k3s-cluster/
 │   │   ├── deployment.yaml
 │   │   ├── service.yaml
 │   │   ├── ingress.yaml
+│   │   ├── ingress-external.yaml
 │   │   └── kustomization.yaml
 │   ├── node-exporter/                     # Prometheus Node Exporter (DaemonSet, Service)
 │   │   ├── daemonset.yaml

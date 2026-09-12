@@ -1,12 +1,16 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: open-webui-ingress
+  name: open-webui-ingress-external
   namespace: llm
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: "leresolver"
 spec:
   ingressClassName: traefik
   rules:
-  - host: chat.ddellspe.dev
+  - host: chat.ddellspe.net
     http:
       paths:
       - path: /
@@ -18,5 +22,4 @@ spec:
               number: 8080
   tls:
   - hosts:
-    - chat.ddellspe.dev
-    secretName: ddellspe-tls
+    - chat.ddellspe.net
