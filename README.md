@@ -6,6 +6,27 @@ This repository contains the complete set of Kubernetes manifests, Helm values, 
 
 ```text
 k3s-cluster/
+├── dev-infra/                             # Developer infrastructure & CI/CD (namespace: dev-infra)
+│   ├── kustomization.yaml                 # Aggregated dev-infra kustomization
+│   ├── namespace.yaml                     # dev-infra namespace definition
+│   ├── registry/                          # Zot OCI Registry & Web UI (PVC, Deployment, Service, Ingress)
+│   │   ├── config.json                    # Standalone Zot configuration (OCI 1.1, search, UI enabled)
+│   │   ├── deployment.yaml                # Zot v2.1.21 pinned to distiller (3.7 TB NVMe)
+│   │   ├── pvc.yaml                       # 100Gi on local-path
+│   │   ├── service.yaml                   # ClusterIP port 5000
+│   │   ├── ingress.yaml                   # registry.ddellspe.dev (ddellspe-tls)
+│   │   └── kustomization.yaml
+│   └── actions-runner/                    # GitHub Actions Runner Controller (ARC) & Multi-Arch Scale Sets
+│       ├── kustomization.yaml
+│       ├── controller/                    # ARC Controller Manager (v0.14.2)
+│       │   ├── deployment.yaml
+│       │   ├── rbac.yaml
+│       │   ├── serviceaccount.yaml
+│       │   └── kustomization.yaml
+│       └── runners/                       # DinD Multi-Arch Autoscaling Runner Sets
+│           ├── runner-amd64.yaml          # arc-runner-amd64 pinned to distiller (DinD)
+│           ├── runner-arm64.yaml          # arc-runner-arm64 pinned to well (DinD)
+│           └── kustomization.yaml
 ├── kube-system/                           # Cluster-wide system configurations
 │   └── coredns/                           # CoreDNS custom rules (wildcard search-domain interceptor)
 │       ├── coredns-custom.yaml
@@ -94,6 +115,7 @@ k3s-cluster/
 
 | Namespace | Workloads | Domain / Endpoint |
 | :--- | :--- | :--- |
+| **`dev-infra`** | Zot OCI Registry (Images & Helm charts), GitHub Actions Runner Controller (ARC) | `registry.ddellspe.dev` |
 | **`llm`** | Dual Gemma 4 (26B & 12B via vLLM), Nemotron 3.5 (GGUF), Qwen 3.6 (GGUF), LiteLLM Router, Open WebUI, SearXNG, Playwright | `chat.ddellspe.dev`, `llm.ddellspe.dev`, `searxng.ddellspe.dev` |
 | **`monitoring`** | Prometheus Server, Grafana, Node Exporter, Caretta (eBPF Service Map) | `grafana.ddellspe.dev`, `prometheus.ddellspe.dev` |
 | **`radar`** | Radar Kubernetes Dashboard | `radar.ddellspe.dev` |
@@ -164,6 +186,7 @@ kubectl scale deployment/llm-qwen36 -n llm --replicas=1
 
 Deploy an entire namespace using Kustomize:
 ```bash
+kubectl apply -k dev-infra/
 kubectl apply -k llm/
 kubectl apply -k monitoring/
 kubectl apply -k kube-system/coredns/
@@ -171,6 +194,8 @@ kubectl apply -k kube-system/coredns/
 
 Deploy a specific workload:
 ```bash
+kubectl apply -k dev-infra/registry/
+kubectl apply -k dev-infra/actions-runner/
 kubectl apply -k llm/open-webui/
 kubectl apply -k llm/playwright/
 kubectl apply -k monitoring/grafana/
@@ -243,6 +268,62 @@ SearXNG settings and credentials are kept out of Git and managed entirely via Ku
    kubectl rollout restart deployment/searxng -n llm
    ```
 
+### 5. Zot OCI Registry Configuration (`dev-infra/registry`)
+Zot natively hosts both **container images** (Docker/OCI) and **Helm charts** (OCI artifacts) on node `distiller` (backed by a 100Gi `local-path` volume on high-speed NVMe storage).
+- **Web UI & Endpoints**: Access the registry catalog and inspect image/chart tags at `https://registry.ddellspe.dev`.
+- **Modifying Settings**:
+  1. Edit [`dev-infra/registry/config.json`](dev-infra/registry/config.json).
+  2. Deploy the updated ConfigMap:
+     ```bash
+     kubectl apply -k dev-infra/registry/
+     ```
+  3. Reload by triggering a rollout restart:
+     ```bash
+     kubectl rollout restart deployment/zot -n dev-infra
+     ```
+- **Pushing & Pulling Helm Charts**:
+  ```bash
+  helm package mychart/ -d .
+  helm push mychart-0.1.0.tgz oci://registry.ddellspe.dev/charts
+  helm show chart oci://registry.ddellspe.dev/charts/mychart --version 0.1.0
+  ```
+- **Pushing & Pulling Container Images**:
+  ```bash
+  docker tag myapp:latest registry.ddellspe.dev/myapp:latest
+  docker push registry.ddellspe.dev/myapp:latest
+  ```
+
+### 6. GitHub Actions Runner Controller (ARC) Multi-Arch Workflows (`dev-infra/actions-runner`)
+Self-hosted runners are powered by GitHub's official modern Actions Runner Controller (`gha-runner-scale-set`), scoped to the `ddellspe-dev` GitHub Organization.
+- **Autoscaling Behavior**: Scales down to 0 runner pods when idle. When a job targeting a scale set is queued in any repository under `ddellspe-dev`, ARC spins up an ephemeral pod with a Docker-in-Docker sidecar, executes the job, and deletes the pod upon completion.
+- **Available Runner Sets**:
+  - **`arc-runner-amd64`**: Pinned to node `distiller` (AMD Strix Halo APU, 32 CPU cores, 128 GB RAM). Ideal for heavy builds, x86 image creation, and test suites.
+  - **`arc-runner-arm64`**: Pinned to node `well` (Raspberry Pi 5 worker, 4 CPU cores, 16 GB RAM). Ideal for native ARM64 compilation and image builds.
+- **Using Runners in Workflows (`.github/workflows/*.yml`)**:
+  ```yaml
+  name: Build and Push
+  on: [push]
+
+  jobs:
+    build-amd64:
+      runs-on: arc-runner-amd64
+      steps:
+        - uses: actions/checkout@v4
+        - name: Build and Push Container
+          run: |
+            docker build -t registry.ddellspe.dev/my-app:amd64 .
+            docker push registry.ddellspe.dev/my-app:amd64
+
+    build-arm64:
+      runs-on: arc-runner-arm64
+      steps:
+        - uses: actions/checkout@v4
+        - name: Build Native ARM64 Container
+          run: |
+            docker build -t registry.ddellspe.dev/my-app:arm64 .
+            docker push registry.ddellspe.dev/my-app:arm64
+  ```
+
 ## Managing Kubernetes Secrets
 
 Secrets (API tokens, TLS certificates, credentials) are stored securely in the cluster and should never be committed to Git in plaintext.
@@ -272,6 +353,15 @@ kubectl create secret generic searxng-secret \
 kubectl create secret generic searxng-config \
   --namespace=llm \
   --from-file=settings.yml=.secrets/searxng-settings.yml \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+#### GitHub Actions Runner Controller Secret (`arc-runner-secret`)
+Used by ARC runner scale sets in `dev-infra` to register runners in the `ddellspe-dev` GitHub Organization:
+```bash
+kubectl create secret generic arc-runner-secret \
+  --namespace=dev-infra \
+  --from-literal=github_token="ghp_YourPersonalAccessTokenHere" \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 

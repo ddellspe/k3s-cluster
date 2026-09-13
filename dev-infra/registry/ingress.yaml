@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zot-ingress
+  namespace: dev-infra
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: registry.ddellspe.dev
+    http:
+      paths:
+      - backend:
+          service:
+            name: zot-service
+            port:
+              number: 5000
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - registry.ddellspe.dev
+    secretName: ddellspe-tls

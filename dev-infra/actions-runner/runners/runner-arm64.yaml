@@ -1,0 +1,190 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: arc-runner-arm64-gha-rs-no-permission
+  namespace: dev-infra
+  labels:
+    app.kubernetes.io/name: arc-runner-arm64
+    app.kubernetes.io/part-of: gha-rs
+    app.kubernetes.io/version: "0.14.2"
+    actions.github.com/scale-set-name: arc-runner-arm64
+    actions.github.com/scale-set-namespace: dev-infra
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: arc-runner-arm64-gha-rs-manager
+  namespace: dev-infra
+  labels:
+    app.kubernetes.io/name: arc-runner-arm64
+    app.kubernetes.io/part-of: gha-rs
+    app.kubernetes.io/version: "0.14.2"
+    actions.github.com/scale-set-name: arc-runner-arm64
+    actions.github.com/scale-set-namespace: dev-infra
+    app.kubernetes.io/component: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - pods/status
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - create
+  - delete
+  - get
+  - patch
+  - update
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  verbs:
+  - create
+  - delete
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: arc-runner-arm64-gha-rs-manager
+  namespace: dev-infra
+  labels:
+    app.kubernetes.io/name: arc-runner-arm64
+    app.kubernetes.io/part-of: gha-rs
+    app.kubernetes.io/version: "0.14.2"
+    actions.github.com/scale-set-name: arc-runner-arm64
+    actions.github.com/scale-set-namespace: dev-infra
+    app.kubernetes.io/component: manager-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: arc-runner-arm64-gha-rs-manager
+subjects:
+- kind: ServiceAccount
+  name: arc-controller-gha-rs-controller
+  namespace: dev-infra
+---
+apiVersion: actions.github.com/v1alpha1
+kind: AutoscalingRunnerSet
+metadata:
+  name: arc-runner-arm64
+  namespace: dev-infra
+  labels:
+    app.kubernetes.io/component: "autoscaling-runner-set"
+    app.kubernetes.io/name: arc-runner-arm64
+    app.kubernetes.io/part-of: gha-rs
+    app.kubernetes.io/version: "0.14.2"
+    actions.github.com/scale-set-name: arc-runner-arm64
+    actions.github.com/scale-set-namespace: dev-infra
+spec:
+  githubConfigUrl: https://github.com/ddellspe-dev
+  githubConfigSecret: arc-runner-secret
+  maxRunners: 2
+  minRunners: 0
+  listenerTemplate:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: well
+      containers:
+      - name: listener
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+        kubernetes.io/hostname: well
+      restartPolicy: Never
+      serviceAccountName: arc-runner-arm64-gha-rs-no-permission
+      initContainers:
+      - name: init-dind-externals
+        image: ghcr.io/actions/actions-runner:latest
+        command: ["cp"]
+        args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
+        volumeMounts:
+        - name: dind-externals
+          mountPath: /home/runner/tmpDir
+      - name: dind
+        image: docker:dind
+        args:
+        - dockerd
+        - --host=unix:///var/run/docker.sock
+        - --group=$(DOCKER_GROUP_GID)
+        env:
+        - name: DOCKER_GROUP_GID
+          value: "123"
+        securityContext:
+          privileged: true
+        restartPolicy: Always
+        startupProbe:
+          exec:
+            command:
+            - docker
+            - info
+          initialDelaySeconds: 0
+          failureThreshold: 24
+          periodSeconds: 5
+        volumeMounts:
+        - name: work
+          mountPath: /home/runner/_work
+        - name: dind-sock
+          mountPath: /var/run
+        - name: dind-externals
+          mountPath: /home/runner/externals
+      containers:
+      - name: runner
+        command:
+        - /home/runner/run.sh
+        image: ghcr.io/actions/actions-runner:latest
+        env:
+        - name: DOCKER_HOST
+          value: unix:///var/run/docker.sock
+        - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+          value: "120"
+        volumeMounts:
+        - name: work
+          mountPath: /home/runner/_work
+        - name: dind-sock
+          mountPath: /var/run
+      volumes:
+      - name: dind-sock
+        emptyDir: {}
+      - name: dind-externals
+        emptyDir: {}
+      - name: work
+        emptyDir: {}
