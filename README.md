@@ -6,6 +6,21 @@ This repository contains the complete set of Kubernetes manifests, Helm values, 
 
 ```text
 k3s-cluster/
+├── buyoutyourcoach/                      # Buyout Your Coach NCAA Tracker (namespace: buyoutyourcoach)
+│   ├── kustomization.yaml                 # Aggregated buyoutyourcoach kustomization
+│   ├── namespace.yaml                     # buyoutyourcoach namespace definition
+│   ├── postgres/                          # PostgreSQL 17 StatefulSet, Service, and Secret
+│   │   ├── statefulset.yaml               # Pinned to well with 10Gi local-path storage
+│   │   ├── service.yaml                   # ClusterIP port 5432
+│   │   ├── secret.yaml                    # Database credentials
+│   │   └── kustomization.yaml
+│   └── app/                               # Next.js Application (Deployment, Service, PVC, Ingress)
+│       ├── deployment.yaml                # App pinned to well with local-path data volume & DB env
+│       ├── pvc.yaml                       # 5Gi on local-path for /app/data
+│       ├── service.yaml                   # ClusterIP port 3000
+│       ├── ingress.yaml                   # Internal ingress: byc.ddellspe.dev (ddellspe-tls)
+│       ├── ingress-external.yaml          # Public ingress: buyoutyourcoach.com (leresolver)
+│       └── kustomization.yaml
 ├── dev-infra/                             # Developer infrastructure & CI/CD (namespace: dev-infra)
 │   ├── kustomization.yaml                 # Aggregated dev-infra kustomization
 │   ├── namespace.yaml                     # dev-infra namespace definition
@@ -115,6 +130,7 @@ k3s-cluster/
 
 | Namespace | Workloads | Domain / Endpoint |
 | :--- | :--- | :--- |
+| **`buyoutyourcoach`** | Next.js NCAA Coach Buyout Tracker, PostgreSQL 17 StatefulSet | `byc.ddellspe.dev` (internal), `buyoutyourcoach.com` (public) |
 | **`dev-infra`** | Zot OCI Registry (Images & Helm charts), GitHub Actions Runner Controller (ARC) | `registry.ddellspe.dev` |
 | **`llm`** | Dual Gemma 4 (26B & 12B via vLLM), Nemotron 3.5 (GGUF), Qwen 3.6 (GGUF), LiteLLM Router, Open WebUI, SearXNG, Playwright | `chat.ddellspe.dev`, `llm.ddellspe.dev`, `searxng.ddellspe.dev` |
 | **`monitoring`** | Prometheus Server, Grafana, Node Exporter, Caretta (eBPF Service Map) | `grafana.ddellspe.dev`, `prometheus.ddellspe.dev` |
@@ -186,6 +202,7 @@ kubectl scale deployment/llm-qwen36 -n llm --replicas=1
 
 Deploy an entire namespace using Kustomize:
 ```bash
+kubectl apply -k buyoutyourcoach/
 kubectl apply -k dev-infra/
 kubectl apply -k llm/
 kubectl apply -k monitoring/
@@ -194,6 +211,8 @@ kubectl apply -k kube-system/coredns/
 
 Deploy a specific workload:
 ```bash
+kubectl apply -k buyoutyourcoach/postgres/
+kubectl apply -k buyoutyourcoach/app/
 kubectl apply -k dev-infra/registry/
 kubectl apply -k dev-infra/actions-runner/
 kubectl apply -k llm/open-webui/
@@ -323,6 +342,19 @@ Self-hosted runners are powered by GitHub's official modern Actions Runner Contr
             docker build -t registry.ddellspe.dev/my-app:arm64 .
             docker push registry.ddellspe.dev/my-app:arm64
   ```
+
+### 7. Buyout Your Coach NCAA Tracker (`buyoutyourcoach/`)
+
+The NCAA Coach Buyout & Contract Tracker web application is deployed in the dedicated `buyoutyourcoach` namespace.
+- **Application (`buyoutyourcoach/app`)**: Next.js 16 standalone server running `registry.ddellspe.dev/buyoutyourcoach:latest` pinned to worker node `well`. Backed by a 5Gi `local-path` persistent volume mounted at `/app/data` for persistence and cache storage. Configured with database environment variables pointing to internal PostgreSQL.
+- **Database (`buyoutyourcoach/postgres`)**: PostgreSQL 17 StatefulSet pinned to worker node `well`, backed by a 10Gi `local-path` volume with health probes and automated initialization.
+- **Internal Validation Ingress (`byc.ddellspe.dev`)**: Protected by the cluster wildcard Let's Encrypt certificate (`ddellspe-tls`) for testing and validation within the internal network.
+- **Public Ingress (`buyoutyourcoach.com`)**: Configured with Traefik's automated Let's Encrypt ACME resolver (`leresolver`).
+  - To activate public access once internal validation is confirmed:
+    ```bash
+    kubectl apply -f buyoutyourcoach/app/ingress-external.yaml
+    ```
+    *(Or uncomment `- ingress-external.yaml` in [`buyoutyourcoach/app/kustomization.yaml`](buyoutyourcoach/app/kustomization.yaml) and run `kubectl apply -k buyoutyourcoach/`)*.
 
 ## Managing Kubernetes Secrets
 

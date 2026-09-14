@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: buyoutyourcoach-data-pvc
+  namespace: buyoutyourcoach
+  labels:
+    app: buyoutyourcoach
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
