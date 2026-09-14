@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keel
+  namespace: dev-infra
+  labels:
+    app.kubernetes.io/name: keel
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keel
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keel
+    spec:
+      serviceAccountName: keel
+      nodeSelector:
+        kubernetes.io/hostname: distiller
+      containers:
+        - name: keel
+          image: ghcr.io/keel-hq/keel:latest
+          imagePullPolicy: Always
+          command: ["/bin/keel"]
+          env:
+            - name: POLL
+              value: "true"
+            - name: POLL_SCHEDULE
+              value: "@every 5m"
+            - name: NOTIFICATION_LEVEL
+              value: "info"
+            - name: DEBUG
+              value: "true"
+            - name: HELM_PROVIDER
+              value: "false"
+            - name: KUBERNETES_PROVIDER
+              value: "true"
+          ports:
+            - name: keel
+              containerPort: 9300
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9300
+            initialDelaySeconds: 15
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9300
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

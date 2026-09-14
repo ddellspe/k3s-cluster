@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: keel-service
+  namespace: dev-infra
+  labels:
+    app.kubernetes.io/name: keel
+spec:
+  type: ClusterIP
+  ports:
+    - name: keel
+      port: 9300
+      targetPort: 9300
+  selector:
+    app.kubernetes.io/name: keel

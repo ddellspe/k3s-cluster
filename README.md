@@ -31,17 +31,23 @@ k3s-cluster/
 │   │   ├── service.yaml                   # ClusterIP port 5000
 │   │   ├── ingress.yaml                   # registry.ddellspe.dev (ddellspe-tls)
 │   │   └── kustomization.yaml
-│   └── actions-runner/                    # GitHub Actions Runner Controller (ARC) & Multi-Arch Scale Sets
-│       ├── kustomization.yaml
-│       ├── controller/                    # ARC Controller Manager (v0.14.2)
-│       │   ├── deployment.yaml
-│       │   ├── rbac.yaml
-│       │   ├── serviceaccount.yaml
-│       │   └── kustomization.yaml
-│       └── runners/                       # DinD Multi-Arch Autoscaling Runner Sets
-│           ├── runner-amd64.yaml          # arc-runner-amd64 pinned to distiller (DinD)
-│           ├── runner-arm64.yaml          # arc-runner-arm64 pinned to well (DinD)
-│           └── kustomization.yaml
+│   ├── actions-runner/                    # GitHub Actions Runner Controller (ARC) & Multi-Arch Scale Sets
+│   │   ├── kustomization.yaml
+│   │   ├── controller/                    # ARC Controller Manager (v0.14.2)
+│   │   │   ├── deployment.yaml
+│   │   │   ├── rbac.yaml
+│   │   │   ├── serviceaccount.yaml
+│   │   │   └── kustomization.yaml
+│   │   └── runners/                       # DinD Multi-Arch Autoscaling Runner Sets
+│   │       ├── runner-amd64.yaml          # arc-runner-amd64 pinned to distiller (DinD)
+│   │       ├── runner-arm64.yaml          # arc-runner-arm64 pinned to well (DinD)
+│   │       └── kustomization.yaml
+│   └── keel/                              # Keel Automated Image Update Controller (Deployment, RBAC, Service)
+│       ├── deployment.yaml                # Keel daemon pinned to distiller (polling trigger enabled)
+│       ├── rbac.yaml                      # ClusterRole & ClusterRoleBinding
+│       ├── serviceaccount.yaml
+│       ├── service.yaml                   # ClusterIP port 9300
+│       └── kustomization.yaml
 ├── kube-system/                           # Cluster-wide system configurations
 │   └── coredns/                           # CoreDNS custom rules (wildcard search-domain interceptor)
 │       ├── coredns-custom.yaml
@@ -131,7 +137,7 @@ k3s-cluster/
 | Namespace | Workloads | Domain / Endpoint |
 | :--- | :--- | :--- |
 | **`buyoutyourcoach`** | Next.js NCAA Coach Buyout Tracker, PostgreSQL 17 StatefulSet | `byc.ddellspe.dev` (internal), `buyoutyourcoach.com` (public) |
-| **`dev-infra`** | Zot OCI Registry (Images & Helm charts), GitHub Actions Runner Controller (ARC) | `registry.ddellspe.dev` |
+| **`dev-infra`** | Zot OCI Registry (Images & Helm charts), GitHub Actions Runner Controller (ARC), Keel (Image Auto-Deployer) | `registry.ddellspe.dev` |
 | **`llm`** | Dual Gemma 4 (26B & 12B via vLLM), Nemotron 3.5 (GGUF), Qwen 3.6 (GGUF), LiteLLM Router, Open WebUI, SearXNG, Playwright | `chat.ddellspe.dev`, `llm.ddellspe.dev`, `searxng.ddellspe.dev` |
 | **`monitoring`** | Prometheus Server, Grafana, Node Exporter, Caretta (eBPF Service Map) | `grafana.ddellspe.dev`, `prometheus.ddellspe.dev` |
 | **`radar`** | Radar Kubernetes Dashboard | `radar.ddellspe.dev` |
@@ -350,11 +356,31 @@ The NCAA Coach Buyout & Contract Tracker web application is deployed in the dedi
 - **Database (`buyoutyourcoach/postgres`)**: PostgreSQL 17 StatefulSet pinned to worker node `well`, backed by a 10Gi `local-path` volume with health probes and automated initialization.
 - **Internal Validation Ingress (`byc.ddellspe.dev`)**: Protected by the cluster wildcard Let's Encrypt certificate (`ddellspe-tls`) for testing and validation within the internal network.
 - **Public Ingress (`buyoutyourcoach.com`)**: Configured with Traefik's automated Let's Encrypt ACME resolver (`leresolver`).
-  - To activate public access once internal validation is confirmed:
-    ```bash
-    kubectl apply -f buyoutyourcoach/app/ingress-external.yaml
-    ```
-    *(Or uncomment `- ingress-external.yaml` in [`buyoutyourcoach/app/kustomization.yaml`](buyoutyourcoach/app/kustomization.yaml) and run `kubectl apply -k buyoutyourcoach/`)*.
+- **Continuous Deployment via Keel**: Annotated with `keel.sh/policy: "force"` and `keel.sh/pollSchedule: "@every 5m"`. Keel automatically polls `registry.ddellspe.dev`, detects when a new image digest is pushed to `:latest`, and triggers a rolling restart.
+
+### 8. Keel Automated Image Deployment (`dev-infra/keel`)
+
+**Keel** runs as a lightweight controller in the `dev-infra` namespace pinned to node `distiller`. It continuously monitors OCI/Docker image registries and automatically performs rolling updates on Kubernetes workloads whenever new images or updated tag digests are published.
+
+#### Enabling Keel on Any Workload
+Add annotations to the Deployment, StatefulSet, or DaemonSet:
+```yaml
+metadata:
+  annotations:
+    keel.sh/policy: "force"            # Updates workload when digest changes for the same tag (:latest)
+    keel.sh/trigger: "poll"            # Uses background registry polling
+    keel.sh/pollSchedule: "@every 5m"  # Polling interval (e.g. @every 1m, @every 5m, @every 10m)
+    keel.sh/match-tag: "true"          # Ensures tag matches before updating
+```
+
+#### Checking Keel Status & Logs
+```bash
+# View Keel logs
+kubectl logs -n dev-infra -l app.kubernetes.io/name=keel -f
+
+# Check update history / change cause on a deployment
+kubectl get deployment buyoutyourcoach -n buyoutyourcoach -o jsonpath='{.metadata.annotations.kubernetes\.io/change-cause}'
+```
 
 ## Managing Kubernetes Secrets
 
