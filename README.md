@@ -49,8 +49,11 @@ k3s-cluster/
 │       ├── service.yaml                   # ClusterIP port 9300
 │       └── kustomization.yaml
 ├── kube-system/                           # Cluster-wide system configurations
-│   └── coredns/                           # CoreDNS custom rules (wildcard search-domain interceptor)
-│       ├── coredns-custom.yaml
+│   ├── coredns/                           # CoreDNS custom rules (wildcard search-domain interceptor)
+│   │   ├── coredns-custom.yaml
+│   │   └── kustomization.yaml
+│   └── traefik/                           # Traefik HelmChartConfig overrides (image version)
+│       ├── helmchartconfig.yaml
 │       └── kustomization.yaml
 ├── llm/                                   # Accelerated LLM inference & AI gateway stack (namespace: llm)
 │   ├── kustomization.yaml                 # Aggregated LLM namespace kustomization

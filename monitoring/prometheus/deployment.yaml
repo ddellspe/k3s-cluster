@@ -76,7 +76,7 @@ spec:
         - --config-file=/etc/prometheus/prometheus.yml
         - --reload-url=http://127.0.0.1:9090/-/reload
         - --watched-dir=/etc/prometheus
-        image: quay.io/prometheus-operator/prometheus-config-reloader:v0.93.1
+        image: quay.io/prometheus-operator/prometheus-config-reloader:v0.94.0
         imagePullPolicy: IfNotPresent
         name: config-reloader
         resources:
