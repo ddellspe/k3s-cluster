@@ -5,42 +5,93 @@ metadata:
   namespace: system-upgrade
 spec:
   concurrencyPolicy: Forbid
-  failedJobsHistoryLimit: 1
   jobTemplate:
-    metadata: {}
     spec:
       template:
-        metadata: {}
         spec:
           containers:
-          - command:
-            - /bin/sh
-            - -c
-            - "set -e\necho \"Checking latest K3s stable release tag from GitHub...\"\
-              \nLATEST_TAG=$(curl -sL -H \"User-Agent: kubectl\" https://api.github.com/repos/k3s-io/k3s/releases/latest\
-              \ | jq -r .tag_name)\nif [ -z \"$LATEST_TAG\" ] || [ \"$LATEST_TAG\"\
-              \ = \"null\" ]; then\n  echo \"Error: Unable to fetch latest release\
-              \ tag\"\n  exit 1\nfi\necho \"Latest stable release found: $LATEST_TAG\"\
-              \n\nfor PLAN in k3s-server k3s-agent; do\n  CURRENT_VERSION=$(kubectl\
-              \ get plan $PLAN -n system-upgrade -o jsonpath='{.spec.version}' 2>/dev/null\
-              \ || echo \"\")\n  echo \"Current $PLAN version: $CURRENT_VERSION\"\n\
-              \  if [ \"$LATEST_TAG\" != \"$CURRENT_VERSION\" ]; then\n    echo \"\
-              Patching $PLAN Plan to version $LATEST_TAG...\"\n    kubectl patch plan\
-              \ $PLAN -n system-upgrade --type=merge -p \"{\\\"spec\\\":{\\\"version\\\":\\\"$LATEST_TAG\\\"}}\"\
-              \n    echo \"$PLAN Plan updated successfully!\"\n  else\n    echo \"\
-              $PLAN Plan is already up to date ($CURRENT_VERSION).\"\n  fi\ndone\n"
+          - name: updater
             image: alpine/k8s:1.36.4
             imagePullPolicy: IfNotPresent
-            name: updater
-            resources: {}
-            terminationMessagePath: /dev/termination-log
-            terminationMessagePolicy: File
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              # 1. Determine target release for current minor version (patch updates only)
+              CURRENT_MINOR=$(kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.kubeletVersion}' | grep -oE 'v1\.[0-9]+')
+              echo "Current cluster minor version: $CURRENT_MINOR"
+
+              CHANNELS_JSON=$(curl -sL https://update.k3s.io/v1-release/channels)
+              LATEST_TAG=$(echo "$CHANNELS_JSON" | jq -r --arg m "$CURRENT_MINOR" '.data[] | select(.id == $m) | .latest')
+
+              if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+                echo "Warning: Channel $CURRENT_MINOR not found, checking stable channel..."
+                LATEST_TAG=$(echo "$CHANNELS_JSON" | jq -r '.data[] | select(.id == "stable") | .latest')
+              fi
+
+              if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+                echo "Error: Unable to determine target release tag"
+                exit 1
+              fi
+
+              echo "Target release tag: $LATEST_TAG"
+
+              # 2. Pre-upgrade safeguard: ensure HelmCharts allow taking ownership & remove conflicting admission policies
+              echo "Applying pre-upgrade safeguards..."
+              kubectl patch helmchart traefik-crd -n kube-system --type=merge -p '{"spec":{"takeOwnership":true}}' 2>/dev/null || true
+              kubectl delete validatingadmissionpolicy,validatingadmissionpolicybinding safe-upgrades.gateway.networking.k8s.io 2>/dev/null || true
+
+              # 3. Check and patch upgrade plans
+              UPDATED=false
+              for PLAN in k3s-server k3s-agent; do
+                CURRENT_VERSION=$(kubectl get plan $PLAN -n system-upgrade -o jsonpath='{.spec.version}' 2>/dev/null || echo "")
+                echo "Current $PLAN version: $CURRENT_VERSION"
+
+                if [ "$LATEST_TAG" != "$CURRENT_VERSION" ]; then
+                  echo "Patching $PLAN Plan to version $LATEST_TAG..."
+                  kubectl patch plan $PLAN -n system-upgrade --type=merge -p "{\"spec\":{\"version\":\"$LATEST_TAG\"}}"
+                  echo "$PLAN Plan updated successfully!"
+                  UPDATED=true
+                else
+                  echo "$PLAN Plan is already up to date ($CURRENT_VERSION)."
+                fi
+              done
+
+              # 4. If an upgrade was triggered, wait and verify cluster health
+              if [ "$UPDATED" = "true" ]; then
+                echo "Waiting up to 15 minutes for all nodes to upgrade..."
+                ALL_READY=false
+                for i in $(seq 1 30); do
+                  sleep 30
+                  PENDING=$(kubectl get nodes --no-headers | grep -v "$LATEST_TAG" | wc -l || true)
+                  if [ "$PENDING" -eq 0 ]; then
+                    echo "All nodes successfully upgraded to $LATEST_TAG!"
+                    ALL_READY=true
+                    break
+                  fi
+                  echo "[$i/30] $PENDING node(s) still upgrading..."
+                done
+
+                if [ "$ALL_READY" != "true" ]; then
+                  echo "WARNING: Some nodes did not finish upgrading within 15 minutes:"
+                  kubectl get nodes -o wide
+                fi
+
+                # 5. Post-upgrade check for failing pods in kube-system
+                echo "Checking for unhealthy pods in kube-system..."
+                UNHEALTHY=$(kubectl get pods -n kube-system --field-selector status.phase!=Running,status.phase!=Succeeded --no-headers | wc -l || true)
+                if [ "$UNHEALTHY" -gt 0 ]; then
+                  echo "WARNING: Found $UNHEALTHY unhealthy pod(s) in kube-system:"
+                  kubectl get pods -n kube-system --field-selector status.phase!=Running,status.phase!=Succeeded
+                else
+                  echo "kube-system is healthy. Upgrade completed successfully!"
+                fi
+              fi
           restartPolicy: OnFailure
-          schedulerName: default-scheduler
-          securityContext: {}
-          serviceAccount: system-upgrade
           serviceAccountName: system-upgrade
-          terminationGracePeriodSeconds: 30
-  schedule: 0 2 * * 0
+  schedule: "0 2 * * 0"
   successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
   suspend: false

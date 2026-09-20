@@ -5,3 +5,4 @@ resources:
   - deployment.yaml
   - cronjob.yaml
   - plan.yaml
+  - rbac.yaml
