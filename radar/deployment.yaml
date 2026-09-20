@@ -30,7 +30,7 @@ spec:
           value: /home/radar
         - name: PROMETHEUS_URL
           value: http://prometheus-service.monitoring.svc.cluster.local:9090
-        image: ghcr.io/skyhook-io/radar:1.13.1
+        image: ghcr.io/skyhook-io/radar:1.14.1
         imagePullPolicy: Always
         livenessProbe:
           failureThreshold: 3

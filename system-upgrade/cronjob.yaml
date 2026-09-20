@@ -21,14 +21,14 @@ spec:
               \ | jq -r .tag_name)\nif [ -z \"$LATEST_TAG\" ] || [ \"$LATEST_TAG\"\
               \ = \"null\" ]; then\n  echo \"Error: Unable to fetch latest release\
               \ tag\"\n  exit 1\nfi\necho \"Latest stable release found: $LATEST_TAG\"\
-              \n\nCURRENT_VERSION=$(kubectl get plan k3s-server -n system-upgrade\
-              \ -o jsonpath='{.spec.version}' 2>/dev/null || echo \"\")\necho \"Current\
-              \ plan version: $CURRENT_VERSION\"\n\nif [ \"$LATEST_TAG\" != \"$CURRENT_VERSION\"\
-              \ ]; then\n  echo \"Patching k3s-server Plan to version $LATEST_TAG...\"\
-              \n  kubectl patch plan k3s-server -n system-upgrade --type=merge -p\
-              \ \"{\\\"spec\\\":{\\\"version\\\":\\\"$LATEST_TAG\\\"}}\"\n  echo \"\
-              Plan updated successfully!\"\nelse\n  echo \"k3s-server Plan is already\
-              \ up to date ($CURRENT_VERSION).\"\nfi\n"
+              \n\nfor PLAN in k3s-server k3s-agent; do\n  CURRENT_VERSION=$(kubectl\
+              \ get plan $PLAN -n system-upgrade -o jsonpath='{.spec.version}' 2>/dev/null\
+              \ || echo \"\")\n  echo \"Current $PLAN version: $CURRENT_VERSION\"\n\
+              \  if [ \"$LATEST_TAG\" != \"$CURRENT_VERSION\" ]; then\n    echo \"\
+              Patching $PLAN Plan to version $LATEST_TAG...\"\n    kubectl patch plan\
+              \ $PLAN -n system-upgrade --type=merge -p \"{\\\"spec\\\":{\\\"version\\\":\\\"$LATEST_TAG\\\"}}\"\
+              \n    echo \"$PLAN Plan updated successfully!\"\n  else\n    echo \"\
+              $PLAN Plan is already up to date ($CURRENT_VERSION).\"\n  fi\ndone\n"
             image: alpine/k8s:1.36.4
             imagePullPolicy: IfNotPresent
             name: updater
