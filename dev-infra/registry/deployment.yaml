@@ -55,7 +55,7 @@ spec:
       volumes:
       - name: data
         persistentVolumeClaim:
-          claimName: zot-pvc
+          claimName: zot-pvc-warm
       - name: config-volume
         configMap:
           name: zot-config

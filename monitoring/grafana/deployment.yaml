@@ -78,7 +78,7 @@ spec:
       volumes:
       - name: grafana-storage
         persistentVolumeClaim:
-          claimName: grafana-pvc
+          claimName: grafana-pvc-warm
       - configMap:
           defaultMode: 420
           name: grafana-datasources

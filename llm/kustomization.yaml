@@ -8,6 +8,6 @@ resources:
   - playwright
   - searxng
   - llm-gemma
-  - llm-nemotron
-  - llm-qwen36
   - llm-router
+
+

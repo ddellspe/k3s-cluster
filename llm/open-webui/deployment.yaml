@@ -88,6 +88,6 @@ spec:
           name: webui-data
       volumes:
       - name: webui-data
-        hostPath:
-          path: /var/lib/rancher/k3s/storage/open-webui-data
-          type: DirectoryOrCreate
+        persistentVolumeClaim:
+          claimName: open-webui-pvc-hot
+

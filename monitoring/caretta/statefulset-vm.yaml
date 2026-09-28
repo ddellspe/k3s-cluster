@@ -69,7 +69,6 @@ spec:
         volumeMounts:
         - name: server-volume
           mountPath: /storage
-          subPath: null
         - name: scrapeconfig
           mountPath: /scrapeconfig
       serviceAccountName: caretta-victoria-metrics-single
@@ -78,5 +77,13 @@ spec:
       - name: scrapeconfig
         configMap:
           name: caretta-vm-scrapeconfig
-      - name: server-volume
-        emptyDir: {}
+  volumeClaimTemplates:
+  - metadata:
+      name: server-volume
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: storage-hot
+      resources:
+        requests:
+          storage: 10Gi

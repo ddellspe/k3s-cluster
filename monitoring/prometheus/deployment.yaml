@@ -101,7 +101,8 @@ spec:
         runAsUser: 65534
       serviceAccount: prometheus-sa
       serviceAccountName: prometheus-sa
-      terminationGracePeriodSeconds: 30
+      nodeSelector:
+        kubernetes.io/hostname: well
       volumes:
       - configMap:
           defaultMode: 420
@@ -109,4 +110,4 @@ spec:
         name: config-volume
       - name: prometheus-storage
         persistentVolumeClaim:
-          claimName: prometheus-pvc
+          claimName: prometheus-pvc-hot

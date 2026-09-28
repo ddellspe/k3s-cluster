@@ -69,15 +69,16 @@ spec:
           periodSeconds: 10
           timeoutSeconds: 5
         volumeMounts:
-        - name: postgres-storage
+        - name: postgres-storage-hot
           mountPath: /var/lib/postgresql/data
   volumeClaimTemplates:
   - metadata:
-      name: postgres-storage
+      name: postgres-storage-hot
     spec:
       accessModes:
       - ReadWriteOnce
-      storageClassName: local-path
+      storageClassName: storage-hot
       resources:
         requests:
           storage: 10Gi
+
