@@ -10,13 +10,13 @@ k3s-cluster/
 │   ├── kustomization.yaml                 # Aggregated buyoutyourcoach kustomization
 │   ├── namespace.yaml                     # buyoutyourcoach namespace definition
 │   ├── postgres/                          # PostgreSQL 17 StatefulSet, Service, and Secret
-│   │   ├── statefulset.yaml               # Pinned to well with 10Gi local-path storage
+│   │   ├── statefulset.yaml               # Pinned to well with 10Gi storage-hot (NVMe)
 │   │   ├── service.yaml                   # ClusterIP port 5432
 │   │   ├── secret.yaml                    # Database credentials
 │   │   └── kustomization.yaml
 │   └── app/                               # Next.js Application (Deployment, Service, PVC, Ingress)
-│       ├── deployment.yaml                # App pinned to well with local-path data volume & DB env
-│       ├── pvc.yaml                       # 5Gi on local-path for /app/data
+│       ├── deployment.yaml                # App pinned to well with storage-hot data volume & DB env
+│       ├── pvc.yaml                       # 5Gi on storage-hot (NVMe) for /app/data
 │       ├── service.yaml                   # ClusterIP port 3000
 │       ├── ingress.yaml                   # Internal ingress: byc.ddellspe.dev (ddellspe-tls)
 │       ├── ingress-external.yaml          # Public ingress: buyoutyourcoach.com (leresolver)
@@ -26,8 +26,8 @@ k3s-cluster/
 │   ├── namespace.yaml                     # dev-infra namespace definition
 │   ├── registry/                          # Zot OCI Registry & Web UI (PVC, Deployment, Service, Ingress)
 │   │   ├── config.json                    # Standalone Zot configuration (OCI 1.1, search, UI enabled)
-│   │   ├── deployment.yaml                # Zot v2.1.21 pinned to distiller (3.7 TB NVMe)
-│   │   ├── pvc.yaml                       # 100Gi on local-path
+│   │   ├── deployment.yaml                # Zot v2.1.21 backed by storage-warm (Margarita NFS 220TB)
+│   │   ├── pvc.yaml                       # 100Gi on storage-warm (RWX)
 │   │   ├── service.yaml                   # ClusterIP port 5000
 │   │   ├── ingress.yaml                   # registry.ddellspe.dev (ddellspe-tls)
 │   │   └── kustomization.yaml
@@ -48,6 +48,15 @@ k3s-cluster/
 │       ├── serviceaccount.yaml
 │       ├── service.yaml                   # ClusterIP port 9300
 │       └── kustomization.yaml
+├── infra/                                 # Cluster-wide infrastructure & storage provisioners
+│   ├── kustomization.yaml                 # Aggregated infra kustomization
+│   └── storage/                           # 3-Tier Storage Architecture (StorageClasses & NFS Provisioner)
+│       ├── deployment.yaml                # nfs-subdir-external-provisioner (connected to Margarita NFS)
+│       ├── rbac.yaml                      # Provisioner RBAC & ServiceAccount
+│       ├── storage-hot.yaml               # HOT tier (NVMe on well, low-latency databases & TSDBs)
+│       ├── storage-warm.yaml              # WARM tier (NFS on Margarita, 220TB high-capacity RWX)
+│       ├── storage-cold.yaml              # COLD tier (local-path on Pis, low-power & read-heavy)
+│       └── kustomization.yaml
 ├── kube-system/                           # Cluster-wide system configurations
 │   ├── coredns/                           # CoreDNS custom rules (wildcard search-domain interceptor)
 │   │   ├── coredns-custom.yaml
@@ -62,22 +71,15 @@ k3s-cluster/
 │   │   ├── service-12b.yaml
 │   │   ├── service-26b.yaml
 │   │   └── kustomization.yaml
-│   ├── llm-nemotron/                      # Nemotron 3.5 Lightning 30B GGUF via llama.cpp (Deployment, Service)
-│   │   ├── deployment.yaml
-│   │   ├── service.yaml
-│   │   └── kustomization.yaml
-│   ├── llm-qwen36/                        # Qwen 3.6 35B A3B GGUF via llama.cpp (Deployment, Service)
-│   │   ├── deployment.yaml
-│   │   ├── service.yaml
-│   │   └── kustomization.yaml
 │   ├── llm-router/                        # LiteLLM Router (Config, Deployment, Service, Ingress)
 │   │   ├── config.yaml
 │   │   ├── deployment.yaml
 │   │   ├── service.yaml
 │   │   ├── ingress.yaml
 │   │   └── kustomization.yaml
-│   ├── open-webui/                        # Open WebUI with RAG & Tool Integration (Deployment, Service, Ingress)
+│   ├── open-webui/                        # Open WebUI with RAG & Tool Integration (Deployment, PVC, Service, Ingress)
 │   │   ├── deployment.yaml
+│   │   ├── pvc.yaml                       # 10Gi on storage-hot (NVMe) for SQLite DB & uploads
 │   │   ├── service.yaml
 │   │   ├── ingress.yaml
 │   │   ├── ingress-external.yaml
@@ -96,7 +98,7 @@ k3s-cluster/
 │   ├── kustomization.yaml                 # Aggregated monitoring kustomization
 │   ├── caretta/                           # Caretta eBPF K8s network & service map (DaemonSet, VM, Grafana)
 │   │   ├── daemonset.yaml
-│   │   ├── statefulset-vm.yaml
+│   │   ├── statefulset-vm.yaml            # VictoriaMetrics backed by 10Gi storage-hot (NVMe)
 │   │   ├── deployment-grafana.yaml
 │   │   ├── services.yaml
 │   │   ├── configmaps.yaml
@@ -106,7 +108,7 @@ k3s-cluster/
 │   │   └── kustomization.yaml
 │   ├── grafana/                           # Grafana (Datasources, PVC, Deployment, Service, Ingress)
 │   │   ├── datasources.yaml
-│   │   ├── pvc.yaml
+│   │   ├── pvc.yaml                       # 20Gi on storage-warm (NFS RWX)
 │   │   ├── deployment.yaml
 │   │   ├── service.yaml
 │   │   ├── ingress.yaml
@@ -118,7 +120,7 @@ k3s-cluster/
 │   │   └── kustomization.yaml
 │   └── prometheus/                        # Prometheus Server (Prometheus Config, PVC, Deployment, Service, Ingress)
 │       ├── prometheus.yml
-│       ├── pvc.yaml
+│       ├── pvc.yaml                       # 60Gi on storage-hot (NVMe) for TSDB
 │       ├── deployment.yaml
 │       ├── service.yaml
 │       ├── ingress.yaml
@@ -141,10 +143,11 @@ k3s-cluster/
 | :--- | :--- | :--- |
 | **`buyoutyourcoach`** | Next.js NCAA Coach Buyout Tracker, PostgreSQL 17 StatefulSet | `byc.ddellspe.dev` (internal), `buyoutyourcoach.com` (public) |
 | **`dev-infra`** | Zot OCI Registry (Images & Helm charts), GitHub Actions Runner Controller (ARC), Keel (Image Auto-Deployer) | `registry.ddellspe.dev` |
-| **`llm`** | Dual Gemma 4 (26B & 12B via vLLM), Nemotron 3.5 (GGUF), Qwen 3.6 (GGUF), LiteLLM Router, Open WebUI, SearXNG, Playwright | `chat.ddellspe.dev`, `llm.ddellspe.dev`, `searxng.ddellspe.dev` |
+| **`infra`** | 3-Tier Storage Architecture (Hot/Warm/Cold StorageClasses, NFS Subdir Provisioner) | Cluster-wide storage |
+| **`llm`** | Dual Gemma 4 (26B & 12B via ROCm vLLM), LiteLLM Router, Open WebUI, SearXNG, Playwright | `chat.ddellspe.dev`, `llm.ddellspe.dev`, `searxng.ddellspe.dev` |
 | **`monitoring`** | Prometheus Server, Grafana, Node Exporter, Caretta (eBPF Service Map) | `grafana.ddellspe.dev`, `prometheus.ddellspe.dev` |
 | **`radar`** | Radar Kubernetes Dashboard | `radar.ddellspe.dev` |
-| **`kube-system`** | CoreDNS custom configuration (`coredns-custom`) | Cluster-wide DNS routing |
+| **`kube-system`** | CoreDNS custom configuration (`coredns-custom`), Traefik | Cluster-wide DNS & routing |
 | **`system-upgrade`**| system-upgrade-controller, auto-updater cron | Automated weekly K3s version upgrades |
 
 ## GPU Resource Management & Model Concurrency (`distiller`)
@@ -171,34 +174,10 @@ The primary deployment runs **dual Google Gemma 4 models concurrently** using na
   - **Total K8s Memory Limit:** `115 GiB` (94% of allocatable node memory)
   - **Headroom:** Leaves ~45 GiB of allocatable headroom below requests, and a ~10–13 GiB cushion at limits for the OS kernel, I/O caches, and system daemons (`node-exporter`, `caretta` eBPF).
 
-#### Standby / Alternative Models (`replicas: 0`)
-Alternative models are kept defined in the repository and cluster, but scaled to `0` by default to preserve GPU memory:
-- **`llm-nemotron`** (NVIDIA Nemotron 3.5 Lightning 30B A3B `Q8_0` GGUF):
-  - Engine: `llama.cpp` ROCm server (`ghcr.io/ggml-org/llama.cpp:server-rocm`, port `8000`)
-  - Context & Reasoning: `65,536` tokens (`-c 65536`), FlashAttention enabled (`-fa on`), `--reasoning-budget 8192`
-  - Memory Footprint: Requests `40 GiB`, Limits `52 GiB` (~31.7 GiB unified VRAM)
-- **`llm-qwen36`** (Qwen 3.6 35B A3B `MXFP4_MOE` GGUF):
-  - Engine: `llama.cpp` ROCm server (`ghcr.io/ggml-org/llama.cpp:server-rocm`, port `8000`)
-  - Context & Reasoning: `65,536` tokens (`-c 65536`), FlashAttention enabled (`-fa on`), `--reasoning-budget 8192`
-  - Memory Footprint: Requests `25 GiB`, Limits `36 GiB`
-
 ### Deployment Strategy
 - All LLM deployment manifests use `strategy.type: Recreate` so that updates to an existing deployment terminate the old pod before spinning up the new one, preventing concurrent GPU memory contention during rollouts.
+- **Selective Toggling in `llm-gemma`:** If you want to run only one of the two Gemma models inside `llm-gemma` to free memory, set `ENABLE_26B: "false"` or `ENABLE_12B: "false"` in [`llm/llm-gemma/deployment.yaml`](llm/llm-gemma/deployment.yaml). The disabled container starts a lightweight Python HTTP stub instead of loading weights into VRAM.
 
-### Switching / Scaling Models
-Models can be scaled dynamically:
-
-```bash
-# 1. Scale down current active model
-kubectl scale deployment/llm-gemma -n llm --replicas=0
-
-# 2. Scale up target alternative model
-kubectl scale deployment/llm-qwen36 -n llm --replicas=1
-# OR
-# kubectl scale deployment/llm-nemotron -n llm --replicas=1
-```
-
-> **Selective Toggling in `llm-gemma`:** If you want to run only one of the two Gemma models inside `llm-gemma` to free memory, set `ENABLE_26B: "false"` or `ENABLE_12B: "false"` in [`llm/llm-gemma/deployment.yaml`](llm/llm-gemma/deployment.yaml). The disabled container starts a lightweight Python HTTP stub instead of loading weights into VRAM.
 
 ### LiteLLM Router Dynamic Health Checks & Routing
 - The LiteLLM Router routes between the active backends:
@@ -297,8 +276,9 @@ SearXNG settings and credentials are kept out of Git and managed entirely via Ku
    ```
 
 ### 5. Zot OCI Registry Configuration (`dev-infra/registry`)
-Zot natively hosts both **container images** (Docker/OCI) and **Helm charts** (OCI artifacts) on node `distiller` (backed by a 100Gi `local-path` volume on high-speed NVMe storage).
+Zot natively hosts both **container images** (Docker/OCI) and **Helm charts** (OCI artifacts), backed by a 100Gi `storage-warm` volume on the network-attached MergerFS HDD array (`margarita`).
 - **Web UI & Endpoints**: Access the registry catalog and inspect image/chart tags at `https://registry.ddellspe.dev`.
+
 - **Modifying Settings**:
   1. Edit [`dev-infra/registry/config.json`](dev-infra/registry/config.json).
   2. Deploy the updated ConfigMap:
@@ -355,8 +335,9 @@ Self-hosted runners are powered by GitHub's official modern Actions Runner Contr
 ### 7. Buyout Your Coach NCAA Tracker (`buyoutyourcoach/`)
 
 The NCAA Coach Buyout & Contract Tracker web application is deployed in the dedicated `buyoutyourcoach` namespace.
-- **Application (`buyoutyourcoach/app`)**: Next.js 16 standalone server running `registry.ddellspe.dev/buyoutyourcoach:latest` pinned to worker node `well`. Backed by a 5Gi `local-path` persistent volume mounted at `/app/data` for persistence and cache storage. Configured with database environment variables pointing to internal PostgreSQL.
-- **Database (`buyoutyourcoach/postgres`)**: PostgreSQL 17 StatefulSet pinned to worker node `well`, backed by a 10Gi `local-path` volume with health probes and automated initialization.
+- **Application (`buyoutyourcoach/app`)**: Next.js 16 standalone server running `registry.ddellspe.dev/buyoutyourcoach:latest` pinned to worker node `well`. Backed by a 5Gi `storage-hot` persistent volume mounted at `/app/data` for persistence and cache storage. Configured with database environment variables pointing to internal PostgreSQL.
+- **Database (`buyoutyourcoach/postgres`)**: PostgreSQL 17 StatefulSet pinned to worker node `well`, backed by a 10Gi `storage-hot` volume on fast NVMe with health probes and automated initialization.
+
 - **Internal Validation Ingress (`byc.ddellspe.dev`)**: Protected by the cluster wildcard Let's Encrypt certificate (`ddellspe-tls`) for testing and validation within the internal network.
 - **Public Ingress (`buyoutyourcoach.com`)**: Configured with Traefik's automated Let's Encrypt ACME resolver (`leresolver`).
 - **Continuous Deployment via Keel**: Annotated with `keel.sh/policy: "force"` and `keel.sh/pollSchedule: "@every 5m"`. Keel automatically polls `registry.ddellspe.dev`, detects when a new image digest is pushed to `:latest`, and triggers a rolling restart.
@@ -385,7 +366,23 @@ kubectl logs -n dev-infra -l app.kubernetes.io/name=keel -f
 kubectl get deployment buyoutyourcoach -n buyoutyourcoach -o jsonpath='{.metadata.annotations.kubernetes\.io/change-cause}'
 ```
 
+## 3-Tier Storage Architecture (`infra/storage`)
+
+The cluster utilizes a 3-tier storage architecture designed to maximize performance, capacity, and hardware longevity:
+
+| Tier | StorageClass | Provisioner | Backing Hardware | Characteristics | Workloads |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **HOT** | `storage-hot` | `rancher.io/local-path` | `well` NVMe (`/dev/nvme0n1p2`) | High IOPS, sub-millisecond latency, node-pinned (`WaitForFirstConsumer`) | PostgreSQL 17 (`buyoutyourcoach`), Open-WebUI SQLite (`llm`), VictoriaMetrics (`caretta-vm`), Prometheus TSDB (`monitoring`) |
+| **WARM** | `storage-warm` | `nfs-subdir-external-provisioner` | `margarita` MergerFS HDD Array (`192.168.2.4:/mnt/storage/k8s`) | 220 TB high capacity, `ReadWriteMany` (RWX), `archiveOnDelete: true` | Zot OCI Registry (`dev-infra`), Grafana dashboards/db (`monitoring`) |
+| **COLD** | `storage-cold` | `rancher.io/local-path` | Pi nodes (`coupe`, `rocks`, `highball`) MicroSD | Low power, lightweight, read-heavy (`WaitForFirstConsumer`) | Configs, read-only tasks; protects SD cards from database write-wear |
+
+### Deploying Storage Infrastructure
+```bash
+kubectl apply -k infra/
+```
+
 ## Managing Kubernetes Secrets
+
 
 Secrets (API tokens, TLS certificates, credentials) are stored securely in the cluster and should never be committed to Git in plaintext.
 
