@@ -70,6 +70,11 @@ k3s-cluster/
 │   │   ├── statefulset.yaml               # Pinned to well with 10Gi storage-hot (NVMe)
 │   │   ├── service.yaml                   # ClusterIP port 5432
 │   │   └── kustomization.yaml
+│   ├── laya/                              # Fast "System 1" Decision Model via ROCm (ModernBERT-large)
+│   │   ├── deployment.yaml                # ROCm accelerated ModernBERT/Laya service
+│   │   ├── service.yaml                   # ClusterIP & NodePort 30800
+│   │   ├── ingress.yaml                   # laya.ddellspe.dev (ddellspe-tls)
+│   │   └── kustomization.yaml
 │   ├── llm-gemma/                         # Dual Gemma 4 (26B + 12B) via ROCm vLLM (Deployment, Services)
 
 │   │   ├── deployment.yaml
@@ -178,8 +183,24 @@ The primary deployment runs **dual Google Gemma 4 models concurrently** using na
 - **Combined Active Footprint:**
   - **GPU Memory Utilization Pool:** `0.48 + 0.28 = 0.76` (~76% of Strix Halo unified VRAM pool)
   - **Total K8s Memory Request:** `77 GiB` (62% of allocatable node memory)
-  - **Total K8s Memory Limit:** `115 GiB` (94% of allocatable node memory)
   - **Headroom:** Leaves ~45 GiB of allocatable headroom below requests, and a ~10–13 GiB cushion at limits for the OS kernel, I/O caches, and system daemons (`node-exporter`, `caretta` eBPF).
+
+#### Fast "System 1" Decision Model (`laya`)
+For instantaneous structured decision making (filtering, sentiment, binary classification, ranking rubrics, routing), the cluster hosts **Laya** (`convaiinnovations/laya`), a non-autoregressive decision model built on ModernBERT-large (~395M params):
+- **Hardware Acceleration:** Native AMD ROCm HIP runtime on the AMD Strix Halo APU (`distiller`, GFX1151) with `HSA_OVERRIDE_GFX_VERSION: "11.5.1"`.
+- **Preloaded Models:** `english` (`convaiinnovations/laya`) and `typed-decisions` (`convaiinnovations/laya-typed-decisions`) preloaded directly into ROCm GPU VRAM.
+- **Latency & Footprint:**
+  - Forward-pass inference latency: **~30–65 ms** per multi-question decision pass.
+  - VRAM footprint: ~1.2 GiB (fits comfortably inside the Strix Halo shared memory headroom alongside Gemma).
+  - Resource allocation: Requests `1 CPU` / `4 GiB RAM`, Limits `4 CPU` / `6 GiB RAM`.
+- **API Surface (`/v1/systemone` wire protocol):**
+  - `GET /health`: Reports model load state and active execution device (`device: cuda`).
+  - `POST /v1/systemone`: Evaluates decisions with `noul` (yes/no probability), `choice` (multiple-choice classification), and `score` (ordinal rubric scale).
+  - `POST /v1/systemone/batch`: Batch evaluation over multiple states.
+- **Network Endpoints:**
+  - Cluster Internal: `http://laya-service.llm:8000`
+  - NodePort Endpoint: `http://192.168.2.7:30800`
+  - External Ingress: `https://laya.ddellspe.dev` (secured with `ddellspe-tls` wildcard certificate)
 
 ### Deployment Strategy
 - All LLM deployment manifests use `strategy.type: Recreate` so that updates to an existing deployment terminate the old pod before spinning up the new one, preventing concurrent GPU memory contention during rollouts.

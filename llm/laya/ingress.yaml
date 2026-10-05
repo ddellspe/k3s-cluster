@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: laya-ingress
+  namespace: llm
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: laya.ddellspe.dev
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: laya-service
+            port:
+              number: 8000
+  tls:
+  - hosts:
+    - laya.ddellspe.dev
+    secretName: ddellspe-tls

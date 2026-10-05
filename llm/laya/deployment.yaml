@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: laya
+  namespace: llm
+  labels:
+    app: laya
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: laya
+  template:
+    metadata:
+      labels:
+        app: laya
+    spec:
+      nodeSelector:
+        gpu.family: strix-halo
+      containers:
+      - name: laya
+        image: docker.io/vllm/vllm-openai-rocm:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          pip install --no-cache-dir "laya[serve]"
+          exec laya-serve --host 0.0.0.0 --port 8000
+        env:
+        - name: HSA_OVERRIDE_GFX_VERSION
+          value: "11.5.1"
+        - name: HIP_VISIBLE_DEVICES
+          value: "0"
+        - name: LAYA_DEVICE
+          value: "cuda:0"
+        - name: LAYA_HOST
+          value: "0.0.0.0"
+        - name: LAYA_PORT
+          value: "8000"
+        - name: LAYA_PRELOAD
+          value: "1"
+        - name: LAYA_MODELS
+          value: "english,typed-decisions"
+        - name: HF_HOME
+          value: "/root/.cache/huggingface"
+        - name: TRANSFORMERS_CACHE
+          value: "/root/.cache/huggingface"
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token-secret
+              key: token
+        ports:
+        - containerPort: 8000
+          name: http
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+        - mountPath: /dev/kfd
+          name: dev-kfd
+        - mountPath: /dev/dri
+          name: dev-dri
+        - mountPath: /root/.cache/huggingface
+          name: hf-cache
+        resources:
+          requests:
+            cpu: "1"
+            memory: "4Gi"
+          limits:
+            cpu: "4"
+            memory: "6Gi"
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 15
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 4Gi
+      - name: dev-kfd
+        hostPath:
+          path: /dev/kfd
+      - name: dev-dri
+        hostPath:
+          path: /dev/dri
+      - name: hf-cache
+        hostPath:
+          path: /var/lib/rancher/k3s/storage/hf-cache
+          type: DirectoryOrCreate
