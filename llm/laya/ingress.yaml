@@ -9,6 +9,13 @@ spec:
   - host: laya.ddellspe.dev
     http:
       paths:
+      - path: /mcp
+        pathType: Prefix
+        backend:
+          service:
+            name: laya-service
+            port:
+              number: 8005
       - path: /
         pathType: Prefix
         backend:

@@ -12,5 +12,9 @@ spec:
     targetPort: 8000
     nodePort: 30800
     name: http
+  - port: 8005
+    targetPort: 8005
+    nodePort: 30805
+    name: mcp
   selector:
     app: laya

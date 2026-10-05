@@ -198,9 +198,15 @@ For instantaneous structured decision making (filtering, sentiment, binary class
   - `POST /v1/systemone`: Evaluates decisions with `noul` (yes/no probability), `choice` (multiple-choice classification), and `score` (ordinal rubric scale).
   - `POST /v1/systemone/batch`: Batch evaluation over multiple states.
 - **Network Endpoints:**
-  - Cluster Internal: `http://laya-service.llm:8000`
-  - NodePort Endpoint: `http://192.168.2.7:30800`
-  - External Ingress: `https://laya.ddellspe.dev` (secured with `ddellspe-tls` wildcard certificate)
+  - Jev Wire Protocol (`/v1/systemone`):
+    - Cluster Internal: `http://laya-service.llm:8000`
+    - NodePort Endpoint: `http://192.168.2.7:30800`
+    - External Ingress: `https://laya.ddellspe.dev`
+  - Model Context Protocol (MCP Streamable HTTP on port `8005`):
+    - Cluster Internal: `http://laya-service.llm:8005/mcp`
+    - NodePort Endpoint: `http://192.168.2.7:30805/mcp`
+    - External Ingress: `https://laya.ddellspe.dev/mcp`
+    - **Open-WebUI Tool Integration**: Registered as an external tool server (`id: laya`, type: `mcp`) exposing 8 native decision tools: `laya_status`, `laya_decide`, `laya_predict`, `laya_predict_batch`, `laya_preset` (guard, email, triage, etc.), `laya_shortlist`, `laya_route`, and `laya_route_batch`.
 
 ### Deployment Strategy
 - All LLM deployment manifests use `strategy.type: Recreate` so that updates to an existing deployment terminate the old pod before spinning up the new one, preventing concurrent GPU memory contention during rollouts.
