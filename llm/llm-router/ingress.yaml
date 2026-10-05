@@ -1,8 +1,58 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
+  name: llm-router-api-ingress
+  namespace: llm
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: llm-llm-auto-auth@kubernetescrd
+    traefik.ingress.kubernetes.io/router.priority: "100"
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: llm.ddellspe.dev
+    http:
+      paths:
+      - path: /v1
+        pathType: Prefix
+        backend:
+          service:
+            name: llm-router-service
+            port:
+              number: 4000
+  - host: vllm.ddellspe.dev
+    http:
+      paths:
+      - path: /v1
+        pathType: Prefix
+        backend:
+          service:
+            name: llm-router-service
+            port:
+              number: 4000
+  - host: router.ddellspe.dev
+    http:
+      paths:
+      - path: /v1
+        pathType: Prefix
+        backend:
+          service:
+            name: llm-router-service
+            port:
+              number: 4000
+  tls:
+  - hosts:
+    - llm.ddellspe.dev
+    - vllm.ddellspe.dev
+    - router.ddellspe.dev
+    secretName: ddellspe-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
   name: llm-router-ingress
   namespace: llm
+  annotations:
+    traefik.ingress.kubernetes.io/router.priority: "10"
 spec:
   ingressClassName: traefik
   rules:

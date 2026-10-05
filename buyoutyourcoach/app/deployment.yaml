@@ -60,6 +60,16 @@ spec:
             secretKeyRef:
               name: postgres-secret
               key: POSTGRES_DB
+        - name: ADMIN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: buyoutyourcoach-api-secret
+              key: ADMIN_API_KEY
+        - name: BYC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: buyoutyourcoach-api-secret
+              key: ADMIN_API_KEY
         - name: POSTGRES_HOST
           value: "postgres-service.buyoutyourcoach.svc.cluster.local"
         - name: POSTGRES_PORT

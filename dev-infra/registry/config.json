@@ -2,9 +2,29 @@
   "distSpecVersion": "1.1.1",
   "storage": {
     "rootDirectory": "/var/lib/registry",
+    "dedupe": false,
     "gc": true,
-    "gcDelay": "1h",
-    "gcInterval": "1h"
+    "gcDelay": "24h",
+    "gcInterval": "24h",
+    "retention": {
+      "dryRun": false,
+      "delay": "24h",
+      "policies": [
+        {
+          "repositories": ["**"],
+          "deleteUntagged": false,
+          "keepTags": [
+            {
+              "patterns": ["^latest$"]
+            },
+            {
+              "patterns": [".*"],
+              "mostRecentlyPushedCount": 10
+            }
+          ]
+        }
+      ]
+    }
   },
   "http": {
     "address": "0.0.0.0",

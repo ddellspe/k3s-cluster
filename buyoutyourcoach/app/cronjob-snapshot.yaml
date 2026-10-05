@@ -1,0 +1,41 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: buyoutyourcoach-daily-snapshot
+  namespace: buyoutyourcoach
+  labels:
+    app: daily-snapshot
+spec:
+  # Daily at midnight Central (05:00 UTC)
+  schedule: "0 5 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: daily-snapshot
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: snapshot-agent
+            image: registry.ddellspe.dev/buyoutyourcoach-jobs:latest
+            imagePullPolicy: Always
+            args: ["snapshot"]
+            env:
+            - name: BYC_API_URL
+              value: "http://buyoutyourcoach-service.buyoutyourcoach.svc.cluster.local:3000"
+            - name: BYC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: buyoutyourcoach-api-secret
+                  key: ADMIN_API_KEY
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: "1"
+                memory: 512Mi

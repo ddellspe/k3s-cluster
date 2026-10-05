@@ -21,7 +21,13 @@ model_list:
 router_settings:
   routing_strategy: usage-based-routing-v2
 
+general_settings:
+  alerting: ["email"]
+
 litellm_settings:
   drop_params: false
+  require_auth_for_metrics_endpoint: false
   success_callback: ["prometheus"]
   failure_callback: ["prometheus"]
+  callbacks: ["smtp_email"]
+

@@ -1,0 +1,9 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: llm-auto-auth
+  namespace: llm
+spec:
+  headers:
+    customRequestHeaders:
+      Authorization: "Bearer <LITELLM_MASTER_KEY>"

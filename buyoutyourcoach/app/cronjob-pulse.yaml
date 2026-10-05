@@ -1,0 +1,50 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: buyoutyourcoach-daily-pulse
+  namespace: buyoutyourcoach
+  labels:
+    app: daily-pulse
+spec:
+  # Daily at 08:00 AM Central (13:00 UTC)
+  schedule: "0 13 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: daily-pulse
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: pulse-agent
+            image: registry.ddellspe.dev/buyoutyourcoach-jobs:latest
+            imagePullPolicy: Always
+            args: ["pulse", "--apply"]
+            env:
+            - name: BYC_API_URL
+              value: "http://buyoutyourcoach-service.buyoutyourcoach.svc.cluster.local:3000"
+            - name: BYC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: buyoutyourcoach-api-secret
+                  key: ADMIN_API_KEY
+            - name: LITELLM_URL
+              value: "http://llm-router-service.llm.svc.cluster.local:4000"
+            - name: LITELLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: buyoutyourcoach-api-secret
+                  key: LLM_API_KEY
+            - name: LITELLM_MODEL
+              value: "google/gemma-4-26B-A4B-it"
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: "1"
+                memory: 512Mi

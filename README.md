@@ -66,17 +66,24 @@ k3s-cluster/
 │       └── kustomization.yaml
 ├── llm/                                   # Accelerated LLM inference & AI gateway stack (namespace: llm)
 │   ├── kustomization.yaml                 # Aggregated LLM namespace kustomization
+│   ├── postgres/                          # Dedicated PostgreSQL 17 for LiteLLM Admin UI
+│   │   ├── statefulset.yaml               # Pinned to well with 10Gi storage-hot (NVMe)
+│   │   ├── service.yaml                   # ClusterIP port 5432
+│   │   └── kustomization.yaml
 │   ├── llm-gemma/                         # Dual Gemma 4 (26B + 12B) via ROCm vLLM (Deployment, Services)
+
 │   │   ├── deployment.yaml
 │   │   ├── service-12b.yaml
 │   │   ├── service-26b.yaml
 │   │   └── kustomization.yaml
-│   ├── llm-router/                        # LiteLLM Router (Config, Deployment, Service, Ingress)
+│   ├── llm-router/                        # LiteLLM Router (Config, Deployment, Service, Ingress, Middleware)
 │   │   ├── config.yaml
 │   │   ├── deployment.yaml
 │   │   ├── service.yaml
 │   │   ├── ingress.yaml
+│   │   ├── middleware.yaml.example        # Traefik auto-auth header injection template for .dev domains
 │   │   └── kustomization.yaml
+
 │   ├── open-webui/                        # Open WebUI with RAG & Tool Integration (Deployment, PVC, Service, Ingress)
 │   │   ├── deployment.yaml
 │   │   ├── pvc.yaml                       # 10Gi on storage-hot (NVMe) for SQLite DB & uploads
@@ -391,13 +398,43 @@ Secrets (API tokens, TLS certificates, credentials) are stored securely in the c
 Use the idempotent `kubectl create ... --dry-run=client -o yaml | kubectl apply -f -` pattern to create or update secrets without erroring if they already exist:
 
 #### HuggingFace Token (`hf-token-secret`)
-Used by gated LLM model deployments (`llm-gemma`, `llm-nemotron`, `llm-qwen36`):
+Used by gated LLM model deployments:
 ```bash
 kubectl create secret generic hf-token-secret \
   --namespace=llm \
   --from-literal=token="hf_YourHuggingFaceTokenHere" \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
+
+#### LiteLLM Master Key (`llm-router-key`)
+Stores the administrator master key for LiteLLM and Open-WebUI:
+```bash
+MASTER_KEY="sk-$(openssl rand -hex 32)"
+kubectl create secret generic llm-router-key \
+  --namespace=llm \
+  --from-literal=master-key="$MASTER_KEY" \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+#### LiteLLM PostgreSQL Secret (`litellm-db-secret`)
+Stores credentials and connection string for LiteLLM's dedicated database:
+```bash
+DB_PASSWORD="$(openssl rand -hex 16)"
+kubectl create secret generic litellm-db-secret \
+  --namespace=llm \
+  --from-literal=password="$DB_PASSWORD" \
+  --from-literal=database-url="postgresql://litellm:${DB_PASSWORD}@litellm-postgres-service.llm.svc.cluster.local:5432/litellm" \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+#### Traefik Auto-Auth Middleware (`llm-auto-auth`)
+Injects the master key for internal `.dev` domains on API routes (`/v1/*`) via `llm-router-api-ingress` so no API key is needed when querying `llm.ddellspe.dev`, while preserving client JWTs and headers for the UI and onboarding flows on `llm-router-ingress`:
+```bash
+MASTER_KEY=$(kubectl get secret llm-router-key -n llm -o jsonpath='{.data.master-key}' | base64 -d)
+sed "s/<LITELLM_MASTER_KEY>/$MASTER_KEY/" llm/llm-router/middleware.yaml.example | kubectl apply -f -
+```
+
+
 
 #### SearXNG Configuration & Secret Key (`searxng-config`, `searxng-secret`)
 ```bash

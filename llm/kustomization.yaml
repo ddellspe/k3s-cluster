@@ -4,10 +4,12 @@ kind: Kustomization
 namespace: llm
 
 resources:
+  - postgres
   - open-webui
   - playwright
   - searxng
   - llm-gemma
   - llm-router
+
 
 

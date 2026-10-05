@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: buyoutyourcoach-weekly-verify
+  namespace: buyoutyourcoach
+  labels:
+    app: weekly-verify
+spec:
+  # Weekly on Sundays at 03:00 AM Central (08:00 UTC)
+  schedule: "0 8 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: weekly-verify
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: verify-agent
+            image: registry.ddellspe.dev/buyoutyourcoach-jobs:latest
+            imagePullPolicy: Always
+            args: ["verify"]
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: "1"
+                memory: 512Mi

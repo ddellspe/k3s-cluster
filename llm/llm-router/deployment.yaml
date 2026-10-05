@@ -29,14 +29,41 @@ spec:
         - --port
         - "4000"
         env:
+        - name: LITELLM_MASTER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: llm-router-key
+              key: master-key
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: litellm-db-secret
+              key: database-url
         - name: PYTHONUNBUFFERED
           value: "1"
         - name: LITELLM_LOCAL_MODEL_COST_MAP
           value: "True"
-        - name: DISABLE_SCHEMA_UPDATE
-          value: "True"
         - name: MALLOC_TRIM_THRESHOLD_
           value: "100000"
+        - name: SMTP_HOST
+          value: "mail.ddellspe.net"
+        - name: SMTP_PORT
+          value: "587"
+        - name: SMTP_USERNAME
+          value: "llm@ddellspe.net"
+        - name: SMTP_SENDER_EMAIL
+          value: "llm@ddellspe.net"
+        - name: SMTP_TLS
+          value: "True"
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: llm-smtp-secret
+              key: smtp-password
+        - name: TEST_EMAIL_ADDRESS
+          value: "david@ddellspe.net"
+
+
         ports:
         - containerPort: 4000
           name: http

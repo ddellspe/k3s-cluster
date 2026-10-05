@@ -6,6 +6,10 @@
 *.key
 *.pem
 *.pfx
+llm/llm-router/middleware.yaml
+llm/llm-router/secret-smtp.yaml
+buyoutyourcoach/app/secret.yaml
+
 
 # OS / Editor Artifacts
 .DS_Store

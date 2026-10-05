@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-remediator
+  namespace: kube-system
+  labels:
+    app: pod-remediator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: pod-remediator
+  template:
+    metadata:
+      labels:
+        app: pod-remediator
+    spec:
+      serviceAccountName: pod-remediator
+      containers:
+      - name: remediator
+        image: alpine/k8s:1.36.4
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "[$(date -u +%FT%TZ)] [pod-remediator] Starting Pod Remediator daemon..."
+          while true; do
+            # 1. Remediate pods stuck in CreateContainerError (>60s old, controller-owned)
+            CCE_PODS=$(kubectl get pods -A -o json 2>/dev/null | jq -r '
+              .items[] |
+              select(
+                (.status.containerStatuses[]? | select(.state.waiting.reason == "CreateContainerError")) != null
+                and ((.metadata.ownerReferences // []) | length > 0)
+                and ((now - (.metadata.creationTimestamp | fromdateiso8601)) >= 60)
+              ) |
+              "\(.metadata.namespace) \(.metadata.name) \((now - (.metadata.creationTimestamp | fromdateiso8601)) | floor)"
+            ' 2>/dev/null || true)
+
+            if [ -n "$CCE_PODS" ]; then
+              echo "$CCE_PODS" | while read -r NS NAME AGE; do
+                [ -z "$NS" ] && continue
+                echo "[$(date -u +%FT%TZ)] [pod-remediator] Wedged pod detected: $NS/$NAME (age: ${AGE}s, reason: CreateContainerError). Deleting to force fresh mount/sandbox recreation..."
+                kubectl delete pod "$NAME" -n "$NS" --grace-period=30 2>/dev/null || true
+              done
+            fi
+
+            # 2. Remediate pods with recent "stale file handle" Warning events (<10m old)
+            STALE_PODS=$(kubectl get events -A --field-selector type=Warning -o json 2>/dev/null | jq -r '
+              .items[] |
+              select(
+                .involvedObject.kind == "Pod"
+                and (.message | contains("stale file handle"))
+                and ((now - (.lastTimestamp // .metadata.creationTimestamp | fromdateiso8601)) < 600)
+              ) |
+              "\(.involvedObject.namespace) \(.involvedObject.name)"
+            ' 2>/dev/null | sort -u || true)
+
+            if [ -n "$STALE_PODS" ]; then
+              echo "$STALE_PODS" | while read -r NS NAME; do
+                [ -z "$NS" ] && continue
+                POD_JSON=$(kubectl get pod "$NAME" -n "$NS" -o json 2>/dev/null || true)
+                if [ -n "$POD_JSON" ]; then
+                  READY=$(echo "$POD_JSON" | jq -r '[.status.conditions[]? | select(.type=="Ready") | .status=="True"] | any')
+                  HAS_OWNER=$(echo "$POD_JSON" | jq -r '((.metadata.ownerReferences // []) | length) > 0')
+                  if [ "$READY" != "true" ] && [ "$HAS_OWNER" = "true" ]; then
+                    echo "[$(date -u +%FT%TZ)] [pod-remediator] Pod with stale file handle event detected: $NS/$NAME (ready: $READY). Deleting to trigger fresh mount..."
+                    kubectl delete pod "$NAME" -n "$NS" --grace-period=30 2>/dev/null || true
+                  fi
+                fi
+              done
+            fi
+
+            sleep 45
+          done
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 64Mi
