@@ -5,4 +5,5 @@ namespace: llm
 
 resources:
   - deployment.yaml
-  - service-26b.yaml
+  - service.yaml
+  - ingress.yaml

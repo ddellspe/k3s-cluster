@@ -8,14 +8,6 @@ model_list:
       supports_reasoning: true
       supports_function_calling: true
 
-  - model_name: google/gemma-4-12b-it
-    litellm_params:
-      model: hosted_vllm/google/gemma-4-12b-it
-      api_base: http://llm-gemma12b-service.llm:8000/v1
-      api_key: "none"
-    model_info:
-      supports_reasoning: true
-      supports_function_calling: true
 
 
 router_settings:

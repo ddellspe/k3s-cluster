@@ -70,16 +70,19 @@ k3s-cluster/
 │   │   ├── statefulset.yaml               # Pinned to well with 10Gi storage-hot (NVMe)
 │   │   ├── service.yaml                   # ClusterIP port 5432
 │   │   └── kustomization.yaml
+│   ├── flux/                              # FLUX.1-schnell Image Generation via ROCm vLLM-Omni
+│   │   ├── deployment.yaml                # vllm-omni-rocm pinned to distiller (Strix Halo APU)
+│   │   ├── service.yaml                   # ClusterIP port 8000 & NodePort 30810
+│   │   ├── ingress.yaml                   # flux.ddellspe.dev (ddellspe-tls)
+│   │   └── kustomization.yaml
 │   ├── laya/                              # Fast "System 1" Decision Model via ROCm (ModernBERT-large)
 │   │   ├── deployment.yaml                # ROCm accelerated ModernBERT/Laya service
 │   │   ├── service.yaml                   # ClusterIP & NodePort 30800
 │   │   ├── ingress.yaml                   # laya.ddellspe.dev (ddellspe-tls)
 │   │   └── kustomization.yaml
-│   ├── llm-gemma/                         # Dual Gemma 4 (26B + 12B) via ROCm vLLM (Deployment, Services)
-
-│   │   ├── deployment.yaml
-│   │   ├── service-12b.yaml
-│   │   ├── service-26b.yaml
+│   ├── llm-gemma/                         # Google Gemma 4 (26B-A4B-it) via ROCm vLLM (Deployment, Service)
+│   │   ├── deployment.yaml                # Native ROCm vLLM pinned to distiller (Strix Halo APU)
+│   │   ├── service-26b.yaml               # ClusterIP port 8000
 │   │   └── kustomization.yaml
 │   ├── llm-router/                        # LiteLLM Router (Config, Deployment, Service, Ingress, Middleware)
 │   │   ├── config.yaml
@@ -156,7 +159,7 @@ k3s-cluster/
 | **`buyoutyourcoach`** | Next.js NCAA Coach Buyout Tracker, PostgreSQL 17 StatefulSet | `byc.ddellspe.dev` (internal), `buyoutyourcoach.com` (public) |
 | **`dev-infra`** | Zot OCI Registry (Images & Helm charts), GitHub Actions Runner Controller (ARC), Keel (Image Auto-Deployer) | `registry.ddellspe.dev` |
 | **`infra`** | 3-Tier Storage Architecture (Hot/Warm/Cold StorageClasses, NFS Subdir Provisioner) | Cluster-wide storage |
-| **`llm`** | Dual Gemma 4 (26B & 12B via ROCm vLLM), LiteLLM Router, Open WebUI, SearXNG, Playwright | `chat.ddellspe.dev`, `llm.ddellspe.dev`, `searxng.ddellspe.dev` |
+| **`llm`** | Gemma 4 26B (vLLM ROCm), FLUX.1-schnell (vLLM-Omni ROCm), Laya Decision Model, LiteLLM Router, Open WebUI, SearXNG, Playwright | `chat.ddellspe.dev`, `llm.ddellspe.dev`, `flux.ddellspe.dev`, `laya.ddellspe.dev`, `searxng.ddellspe.dev` |
 | **`monitoring`** | Prometheus Server, Grafana, Node Exporter, Caretta (eBPF Service Map) | `grafana.ddellspe.dev`, `prometheus.ddellspe.dev` |
 | **`radar`** | Radar Kubernetes Dashboard | `radar.ddellspe.dev` |
 | **`kube-system`** | CoreDNS custom configuration (`coredns-custom`), Traefik | Cluster-wide DNS & routing |
@@ -168,22 +171,31 @@ The cluster's accelerated inference models run on node **`distiller`** (AMD Stri
 
 ### Memory Footprint & Concurrency
 
-#### Active Dual-Model Deployment (`llm-gemma`)
-The primary deployment runs **dual Google Gemma 4 models concurrently** using native ROCm vLLM inside a single multi-container pod (`llm-gemma`):
-- **`google/gemma-4-26B-A4B-it`** (vLLM server on port `8000`):
-  - **GPU Memory Utilization:** `0.48` (~48% GPU memory)
-  - **KV Cache Buffer:** `6 GiB` (`--kv-cache-memory-bytes 6G`)
-  - **Context Window:** `32,768` tokens (`--max-model-len 32768`)
-  - **K8s Resources:** Requests `52 GiB` RAM / 4 CPU; Limits `80 GiB` RAM / 16 CPU
-- **`google/gemma-4-12B-it`** (vLLM server on port `8001`):
-  - **GPU Memory Utilization:** `0.28` (~28% GPU memory)
-  - **KV Cache Buffer:** `8 GiB` (`--kv-cache-memory-bytes 8G`)
-  - **Context Window:** `32,768` tokens (`--max-model-len 32768`)
-  - **K8s Resources:** Requests `25 GiB` RAM / 2 CPU; Limits `35 GiB` RAM / 8 CPU
-- **Combined Active Footprint:**
-  - **GPU Memory Utilization Pool:** `0.48 + 0.28 = 0.76` (~76% of Strix Halo unified VRAM pool)
-  - **Total K8s Memory Request:** `77 GiB` (62% of allocatable node memory)
-  - **Headroom:** Leaves ~45 GiB of allocatable headroom below requests, and a ~10–13 GiB cushion at limits for the OS kernel, I/O caches, and system daemons (`node-exporter`, `caretta` eBPF).
+#### Large Language Model (`llm-gemma`)
+The primary chat model is **Google Gemma 4 (26B-A4B-it)** running via native ROCm vLLM inside [`llm/llm-gemma`](llm/llm-gemma/):
+- **Model:** `google/gemma-4-26B-A4B-it` (vLLM server on port `8000`)
+- **GPU Memory Utilization:** `0.48` (~48% GPU memory, reserving ~60 GiB unified VRAM with KV cache)
+- **KV Cache Buffer:** `6 GiB` (`--kv-cache-memory-bytes 6G`)
+- **Context Window:** `32,768` tokens (`--max-model-len 32768`)
+- **K8s Resources:** Requests `52 GiB` RAM / 4 CPU; Limits `80 GiB` RAM / 16 CPU
+- **Endpoint:** `http://llm-gemma26b-service.llm:8000`
+
+#### Image Generation Model (`flux`)
+High-resolution text-to-image synthesis is provided by **FLUX.1-schnell** running via `vllm-omni-rocm` inside [`llm/flux`](llm/flux/):
+- **Model:** `black-forest-labs/FLUX.1-schnell` (serving port `8000`)
+- **Container Image:** `docker.io/vllm/vllm-omni-rocm:v0.28.0`
+- **ROCm Hardware Acceleration:** AMD Strix Halo APU (`distiller`, GFX1151) with `HSA_OVERRIDE_GFX_VERSION: "11.5.1"`, SDPA attention backend, and native BF16 execution.
+- **Latency & Footprint:**
+  - VRAM footprint: ~31.4 GiB in unified VRAM (model weights + diffusion state).
+  - Generation speed: ~10s for 4-step 1024x1024 inference.
+  - Resource allocation: Requests `25 GiB` RAM / 4 CPU; Limits `35 GiB` RAM / 16 CPU.
+- **API Surface & Open-WebUI Integration:**
+  - Provides OpenAI-compatible image generations API (`POST /v1/images/generations`).
+  - Open-WebUI is configured to route image generation requests directly to `http://llm-flux-service.llm:8000/v1`.
+- **Network Endpoints:**
+  - Cluster Internal: `http://llm-flux-service.llm:8000`
+  - NodePort Endpoint: `http://192.168.2.7:30810`
+  - External Ingress: `https://flux.ddellspe.dev`
 
 #### Fast "System 1" Decision Model (`laya`)
 For instantaneous structured decision making (filtering, sentiment, binary classification, ranking rubrics, routing), the cluster hosts **Laya** (`convaiinnovations/laya`), a non-autoregressive decision model built on ModernBERT-large (~395M params):
@@ -191,7 +203,7 @@ For instantaneous structured decision making (filtering, sentiment, binary class
 - **Preloaded Models:** `english` (`convaiinnovations/laya`) and `typed-decisions` (`convaiinnovations/laya-typed-decisions`) preloaded directly into ROCm GPU VRAM.
 - **Latency & Footprint:**
   - Forward-pass inference latency: **~30–65 ms** per multi-question decision pass.
-  - VRAM footprint: ~1.2 GiB (fits comfortably inside the Strix Halo shared memory headroom alongside Gemma).
+  - VRAM footprint: ~1.2 GiB (fits comfortably inside the Strix Halo shared memory headroom alongside Gemma and FLUX).
   - Resource allocation: Requests `1 CPU` / `4 GiB RAM`, Limits `4 CPU` / `6 GiB RAM`.
 - **API Surface (`/v1/systemone` wire protocol):**
   - `GET /health`: Reports model load state and active execution device (`device: cuda`).
@@ -208,17 +220,18 @@ For instantaneous structured decision making (filtering, sentiment, binary class
     - External Ingress: `https://laya.ddellspe.dev/mcp`
     - **Open-WebUI Tool Integration**: Registered as an external tool server (`id: laya`, type: `mcp`) exposing 8 native decision tools: `laya_status`, `laya_decide`, `laya_predict`, `laya_predict_batch`, `laya_preset` (guard, email, triage, etc.), `laya_shortlist`, `laya_route`, and `laya_route_batch`.
 
+#### Combined Active Footprint
+- **Total Unified VRAM Utilization:** Gemma 26B (~60 GiB) + FLUX.1-schnell (~31.4 GiB) + Laya (~1.2 GiB) = ~92.6 GiB total (~75% of Strix Halo unified memory pool).
+- **Headroom:** Leaves ~30 GiB of headroom for the OS kernel, page caches, build tasks (DinD ARC runners), and system daemons (`node-exporter`, `caretta` eBPF).
+
 ### Deployment Strategy
 - All LLM deployment manifests use `strategy.type: Recreate` so that updates to an existing deployment terminate the old pod before spinning up the new one, preventing concurrent GPU memory contention during rollouts.
-- **Selective Toggling in `llm-gemma`:** If you want to run only one of the two Gemma models inside `llm-gemma` to free memory, set `ENABLE_26B: "false"` or `ENABLE_12B: "false"` in [`llm/llm-gemma/deployment.yaml`](llm/llm-gemma/deployment.yaml). The disabled container starts a lightweight Python HTTP stub instead of loading weights into VRAM.
-
 
 ### LiteLLM Router Dynamic Health Checks & Routing
-- The LiteLLM Router routes between the active backends:
+- The LiteLLM Router routes conversational LLM traffic to:
   - `google/gemma-4-26B-A4B-it` via `hosted_vllm` (`http://llm-gemma26b-service.llm:8000/v1`)
-  - `google/gemma-4-12b-it` via `hosted_vllm` (`http://llm-gemma12b-service.llm:8001/v1`)
-- Both model configurations support native reasoning and function calling (`supports_reasoning: true`, `supports_function_calling: true`).
-- LiteLLM uses `usage-based-routing-v2` and dynamically probes `/health` endpoints. When a model backend is disabled or scaled down, LiteLLM marks the backend unavailable without dropping in-flight requests.
+- Supports native reasoning and function calling (`supports_reasoning: true`, `supports_function_calling: true`).
+- LiteLLM dynamically probes backend `/health` endpoints and marks unavailable backends without dropping in-flight requests.
 
 ## Deployment Examples
 
@@ -237,6 +250,9 @@ kubectl apply -k buyoutyourcoach/postgres/
 kubectl apply -k buyoutyourcoach/app/
 kubectl apply -k dev-infra/registry/
 kubectl apply -k dev-infra/actions-runner/
+kubectl apply -k llm/llm-gemma/
+kubectl apply -k llm/flux/
+kubectl apply -k llm/laya/
 kubectl apply -k llm/open-webui/
 kubectl apply -k llm/playwright/
 kubectl apply -k monitoring/grafana/
