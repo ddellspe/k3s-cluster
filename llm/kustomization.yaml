@@ -11,7 +11,7 @@ resources:
   - llm-gemma
   - llm-router
   - laya
-  - flux
+  - comfyui
 
 
 

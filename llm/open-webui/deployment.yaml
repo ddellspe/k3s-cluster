@@ -55,6 +55,18 @@ spec:
           value: "ws://playwright-service.llm:3000"
         - name: PLAYWRIGHT_TIMEOUT
           value: "15000"
+        - name: ENABLE_IMAGE_GENERATION
+          value: "True"
+        - name: IMAGE_GENERATION_ENGINE
+          value: "comfyui"
+        - name: COMFYUI_BASE_URL
+          value: "http://comfyui-service.llm:8188"
+        - name: ENABLE_IMAGE_EDIT
+          value: "True"
+        - name: IMAGE_EDIT_ENGINE
+          value: "comfyui"
+        - name: IMAGES_EDIT_COMFYUI_BASE_URL
+          value: "http://comfyui-service.llm:8188"
         startupProbe:
           httpGet:
             path: /health

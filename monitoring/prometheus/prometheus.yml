@@ -50,11 +50,6 @@ scrape_configs:
           instance: 'llm-gemma26b'
           model: 'google/gemma-4-26B-A4B-it'
           app: 'llm-gemma26b'
-      - targets: ['llm-flux-service.llm:8000']
-        labels:
-          instance: 'llm-flux'
-          model: 'black-forest-labs/FLUX.1-schnell'
-          app: 'llm-flux'
       - targets: ['llm-qwen36-service.llm:8000']
         labels:
           instance: 'llm-qwen36'

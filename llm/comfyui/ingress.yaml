@@ -1,22 +1,23 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: llm-flux-ingress
+  name: comfyui-ingress
   namespace: llm
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
 spec:
-  ingressClassName: traefik
   rules:
-  - host: flux.ddellspe.dev
+  - host: comfy.ddellspe.dev
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: llm-flux-service
+            name: comfyui-service
             port:
-              number: 8000
+              number: 8188
   tls:
   - hosts:
-    - flux.ddellspe.dev
+    - comfy.ddellspe.dev
     secretName: ddellspe-tls

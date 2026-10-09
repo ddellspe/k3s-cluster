@@ -70,10 +70,10 @@ k3s-cluster/
 │   │   ├── statefulset.yaml               # Pinned to well with 10Gi storage-hot (NVMe)
 │   │   ├── service.yaml                   # ClusterIP port 5432
 │   │   └── kustomization.yaml
-│   ├── flux/                              # FLUX.1-schnell Image Generation via ROCm vLLM-Omni
-│   │   ├── deployment.yaml                # vllm-omni-rocm pinned to distiller (Strix Halo APU)
-│   │   ├── service.yaml                   # ClusterIP port 8000 & NodePort 30810
-│   │   ├── ingress.yaml                   # flux.ddellspe.dev (ddellspe-tls)
+│   ├── comfyui/                           # ComfyUI Visual GenAI Studio via ROCm 7 (Strix Halo APU)
+│   │   ├── deployment.yaml                # yanwk/comfyui-boot:rocm7 pinned to distiller (RDNA 3.5 APU)
+│   │   ├── service.yaml                   # ClusterIP port 8188 & NodePort 30818
+│   │   ├── ingress.yaml                   # comfy.ddellspe.dev (ddellspe-tls)
 │   │   └── kustomization.yaml
 │   ├── laya/                              # Fast "System 1" Decision Model via ROCm (ModernBERT-large)
 │   │   ├── deployment.yaml                # ROCm accelerated ModernBERT/Laya service
@@ -159,7 +159,7 @@ k3s-cluster/
 | **`buyoutyourcoach`** | Next.js NCAA Coach Buyout Tracker, PostgreSQL 17 StatefulSet | `byc.ddellspe.dev` (internal), `buyoutyourcoach.com` (public) |
 | **`dev-infra`** | Zot OCI Registry (Images & Helm charts), GitHub Actions Runner Controller (ARC), Keel (Image Auto-Deployer) | `registry.ddellspe.dev` |
 | **`infra`** | 3-Tier Storage Architecture (Hot/Warm/Cold StorageClasses, NFS Subdir Provisioner) | Cluster-wide storage |
-| **`llm`** | Gemma 4 26B (vLLM ROCm), FLUX.1-schnell (vLLM-Omni ROCm), Laya Decision Model, LiteLLM Router, Open WebUI, SearXNG, Playwright | `chat.ddellspe.dev`, `llm.ddellspe.dev`, `flux.ddellspe.dev`, `laya.ddellspe.dev`, `searxng.ddellspe.dev` |
+| **`llm`** | Gemma 4 26B (vLLM ROCm), ComfyUI GenAI Studio (ROCm 7), Laya Decision Model, LiteLLM Router, Open WebUI, SearXNG, Playwright | `chat.ddellspe.dev`, `llm.ddellspe.dev`, `comfy.ddellspe.dev`, `laya.ddellspe.dev`, `searxng.ddellspe.dev` |
 | **`monitoring`** | Prometheus Server, Grafana, Node Exporter, Caretta (eBPF Service Map) | `grafana.ddellspe.dev`, `prometheus.ddellspe.dev` |
 | **`radar`** | Radar Kubernetes Dashboard | `radar.ddellspe.dev` |
 | **`kube-system`** | CoreDNS custom configuration (`coredns-custom`), Traefik | Cluster-wide DNS & routing |
@@ -180,22 +180,20 @@ The primary chat model is **Google Gemma 4 (26B-A4B-it)** running via native ROC
 - **K8s Resources:** Requests `52 GiB` RAM / 4 CPU; Limits `80 GiB` RAM / 16 CPU
 - **Endpoint:** `http://llm-gemma26b-service.llm:8000`
 
-#### Image Generation Model (`flux`)
-High-resolution text-to-image synthesis is provided by **FLUX.1-schnell** running via `vllm-omni-rocm` inside [`llm/flux`](llm/flux/):
-- **Model:** `black-forest-labs/FLUX.1-schnell` (serving port `8000`)
-- **Container Image:** `docker.io/vllm/vllm-omni-rocm:v0.28.0`
-- **ROCm Hardware Acceleration:** AMD Strix Halo APU (`distiller`, GFX1151) with `HSA_OVERRIDE_GFX_VERSION: "11.5.1"`, SDPA attention backend, and native BF16 execution.
-- **Latency & Footprint:**
-  - VRAM footprint: ~31.4 GiB in unified VRAM (model weights + diffusion state).
-  - Generation speed: ~10s for 4-step 1024x1024 inference.
-  - Resource allocation: Requests `25 GiB` RAM / 4 CPU; Limits `35 GiB` RAM / 16 CPU.
-- **API Surface & Open-WebUI Integration:**
-  - Provides OpenAI-compatible image generations API (`POST /v1/images/generations`).
-  - Open-WebUI is configured to route image generation requests directly to `http://llm-flux-service.llm:8000/v1`.
+#### Visual Generative AI Studio (`comfyui`)
+Flexible, multi-architecture visual generation and workflow execution is provided by **ComfyUI** running via ROCm 7 inside [`llm/comfyui`](llm/comfyui/):
+- **Runtime Image:** `docker.io/yanwk/comfyui-boot:rocm7` (serving on port `8188`)
+- **ROCm Hardware Acceleration:** AMD Strix Halo APU (`distiller`, GFX1151) with `HSA_OVERRIDE_GFX_VERSION: "11.5.1"`, PyTorch cross-attention, and RDNA 3.5 driver flags (`HSA_ENABLE_SDMA=0`, `HSA_USE_SVM=0`).
+- **Model Support:** Supports any modern diffusion/DiT checkpoint (FLUX.1/2, SD 3.5, SDXL, Wan 2.1, Hunyuan, LoRAs, ControlNets, and upscalers).
+- **Persistent Storage:** Persistent HostPath at `/var/lib/rancher/k3s/storage/comfyui` mounted to `/root` for models (`/root/ComfyUI/models`), custom nodes, inputs, and outputs.
+- **Resource Allocation:** Requests `4 CPU` / `16 GiB RAM`, Limits `16 CPU` / `48 GiB RAM`.
+- **Generation Interfaces (Dual Modes):**
+  - **Direct Visual Node Editor:** Full interactive browser GUI at `https://comfy.ddellspe.dev` for visual workflow composition, parameter tuning, and image/video experimentation.
+  - **Headless Open-WebUI Integration:** Connected to Open-WebUI via native ComfyUI engine (`image_generation.engine: 'comfyui'`) at `http://comfyui-service.llm:8188`, allowing seamless prompt-based generation directly in chat.
 - **Network Endpoints:**
-  - Cluster Internal: `http://llm-flux-service.llm:8000`
-  - NodePort Endpoint: `http://192.168.2.7:30810`
-  - External Ingress: `https://flux.ddellspe.dev`
+  - Cluster Internal: `http://comfyui-service.llm:8188`
+  - NodePort Endpoint: `http://192.168.2.7:30818`
+  - External Ingress: `https://comfy.ddellspe.dev`
 
 #### Fast "System 1" Decision Model (`laya`)
 For instantaneous structured decision making (filtering, sentiment, binary classification, ranking rubrics, routing), the cluster hosts **Laya** (`convaiinnovations/laya`), a non-autoregressive decision model built on ModernBERT-large (~395M params):
