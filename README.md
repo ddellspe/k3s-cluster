@@ -84,6 +84,18 @@ k3s-cluster/
 │   │   ├── deployment.yaml                # Native ROCm vLLM pinned to distiller (Strix Halo APU)
 │   │   ├── service-26b.yaml               # ClusterIP port 8000
 │   │   └── kustomization.yaml
+│   ├── llm-kokoro/                        # Kokoro-82M ONNX TTS Service (Pi 5 worker: well)
+│   │   ├── deployment.yaml                # Sub-second streaming CPU speech synthesis
+│   │   ├── service.yaml                   # ClusterIP 8880 & NodePort 30880
+│   │   ├── ingress.yaml                   # tts.ddellspe.dev
+│   │   └── kustomization.yaml
+│   ├── llm-whisper/                       # Faster-Whisper STT Service (Pi 5 worker: well)
+│   │   ├── deployment.yaml                # CTranslate2 INT8 speech transcription
+│   │   ├── pvc.yaml                       # 5Gi persistent storage-hot model cache
+│   │   ├── configmap.yaml                 # Model aliases configuration
+│   │   ├── service.yaml                   # ClusterIP 8000 & NodePort 30890
+│   │   ├── ingress.yaml                   # whisper.ddellspe.dev
+│   │   └── kustomization.yaml
 │   ├── llm-router/                        # LiteLLM Router (Config, Deployment, Service, Ingress, Middleware)
 │   │   ├── config.yaml
 │   │   ├── deployment.yaml
@@ -273,8 +285,11 @@ kubectl apply -k buyoutyourcoach/app/
 kubectl apply -k dev-infra/registry/
 kubectl apply -k dev-infra/actions-runner/
 kubectl apply -k llm/llm-gemma/
-kubectl apply -k llm/flux/
+kubectl apply -k llm/llm-flux2/
 kubectl apply -k llm/laya/
+kubectl apply -k llm/llm-kokoro/
+kubectl apply -k llm/llm-whisper/
+kubectl apply -k llm/llm-router/
 kubectl apply -k llm/open-webui/
 kubectl apply -k llm/playwright/
 kubectl apply -k monitoring/grafana/

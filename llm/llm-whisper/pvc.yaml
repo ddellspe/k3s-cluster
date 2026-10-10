@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: llm-whisper-pvc
+  namespace: llm
+  labels:
+    app: llm-whisper
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: storage-hot
+  resources:
+    requests:
+      storage: 5Gi

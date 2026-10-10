@@ -19,6 +19,25 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: "well"
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+      - name: preload-model
+        image: ghcr.io/speaches-ai/speaches:latest-cpu
+        command:
+        - python3
+        - -c
+        - |
+          import huggingface_hub
+          print("Checking and ensuring Systran/faster-whisper-small in cache...")
+          huggingface_hub.snapshot_download(
+              "Systran/faster-whisper-small",
+              allow_patterns=["config.json", "preprocessor_config.json", "model.bin", "tokenizer.json", "vocabulary.*", "README.md"]
+          )
+          print("Model ready!")
+        volumeMounts:
+        - mountPath: /home/ubuntu/.cache/huggingface
+          name: model-cache
       containers:
       - name: speaches
         image: ghcr.io/speaches-ai/speaches:latest-cpu
@@ -32,6 +51,8 @@ spec:
           value: "int8"
         - name: WHISPER__CPU_THREADS
           value: "4"
+        - name: WHISPER__TTL
+          value: "-1"
         ports:
         - containerPort: 8000
           name: http
@@ -65,8 +86,15 @@ spec:
             cpu: "3000m"
             memory: "2Gi"
         volumeMounts:
-        - mountPath: /home/speaches/.cache
+        - mountPath: /home/ubuntu/.cache/huggingface
           name: model-cache
+        - mountPath: /home/ubuntu/speaches/model_aliases.json
+          name: model-aliases
+          subPath: model_aliases.json
       volumes:
       - name: model-cache
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: llm-whisper-pvc
+      - name: model-aliases
+        configMap:
+          name: llm-whisper-aliases

@@ -4,6 +4,8 @@ kind: Kustomization
 namespace: llm
 
 resources:
+  - pvc.yaml
+  - configmap.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
