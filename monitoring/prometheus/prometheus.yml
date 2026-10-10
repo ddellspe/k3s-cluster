@@ -40,21 +40,16 @@ scrape_configs:
   - job_name: 'llm models'
     scheme: http
     static_configs:
-      - targets: ['llm-nemotron-service.llm:8000']
-        labels:
-          instance: 'llm-nemotron'
-          model: 'nvidia/Nemotron-3.5-Lightning-30B-A3B'
-          app: 'llm-nemotron'
       - targets: ['llm-gemma26b-service.llm:8000']
         labels:
           instance: 'llm-gemma26b'
           model: 'google/gemma-4-26B-A4B-it'
           app: 'llm-gemma26b'
-      - targets: ['llm-qwen36-service.llm:8000']
+      - targets: ['llm-flux2-service.llm:8000']
         labels:
-          instance: 'llm-qwen36'
-          model: 'Qwen/Qwen3.6-35B-A3B'
-          app: 'llm-qwen36'
+          instance: 'llm-flux2'
+          model: 'black-forest-labs/FLUX.2-klein-4B'
+          app: 'llm-flux2'
 
   - job_name: 'docker'
     scheme: http
