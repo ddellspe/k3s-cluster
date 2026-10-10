@@ -29,15 +29,15 @@ spec:
         - name: HIP_VISIBLE_DEVICES
           value: "0"
         - name: PYTORCH_HIP_ALLOC_CONF
-          value: "expandable_segments:True"
+          value: "garbage_collection_threshold:0.6,max_split_size_mb:128"
         - name: PYTORCH_ALLOC_CONF
-          value: "expandable_segments:True"
+          value: "garbage_collection_threshold:0.6,max_split_size_mb:128"
         - name: HSA_ENABLE_SDMA
           value: "0"
         - name: HSA_USE_SVM
           value: "0"
         - name: CLI_ARGS
-          value: "--listen 0.0.0.0 --port 8188 --use-pytorch-cross-attention --disable-mmap --disable-smart-memory"
+          value: "--listen 0.0.0.0 --port 8188 --use-pytorch-cross-attention --disable-mmap --reserve-vram 72 --cache-ram 4 8"
         ports:
         - containerPort: 8188
           name: http
@@ -74,15 +74,15 @@ spec:
         resources:
           requests:
             cpu: "4"
-            memory: "16Gi"
+            memory: "8Gi"
           limits:
             cpu: "16"
-            memory: "48Gi"
+            memory: "22Gi"
       volumes:
       - name: dshm
         emptyDir:
           medium: Memory
-          sizeLimit: 16Gi
+          sizeLimit: 2Gi
       - name: dev-kfd
         hostPath:
           path: /dev/kfd
