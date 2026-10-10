@@ -27,9 +27,9 @@ spec:
         - /bin/bash
         - -c
         - |
-          echo "Starting FLUX.2 Klein 4B on vLLM-Omni ROCm..."
+          echo "Starting FLUX.2 Klein 9B on vLLM-Omni ROCm..."
           sed -i 's/50 if req.sampling_params.num_inference_steps is None/4 if req.sampling_params.num_inference_steps is None/g' /usr/local/lib/python3.12/dist-packages/vllm_omni/diffusion/models/flux2_klein/pipeline_flux2_klein.py || true
-          exec python3 -m vllm_omni.entrypoints.cli.main serve black-forest-labs/FLUX.2-klein-4B \
+          exec python3 -m vllm_omni.entrypoints.cli.main serve black-forest-labs/FLUX.2-klein-9B \
             --omni \
             --host 0.0.0.0 \
             --port 8000 \
@@ -56,7 +56,7 @@ spec:
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
-          failureThreshold: 30
+          failureThreshold: 60
         readinessProbe:
           httpGet:
             path: /health
@@ -85,15 +85,15 @@ spec:
         resources:
           requests:
             cpu: "4"
-            memory: "8Gi"
+            memory: "16Gi"
           limits:
             cpu: "16"
-            memory: "22Gi"
+            memory: "48Gi"
       volumes:
       - name: dshm
         emptyDir:
           medium: Memory
-          sizeLimit: 2Gi
+          sizeLimit: 8Gi
       - name: dev-kfd
         hostPath:
           path: /dev/kfd

@@ -181,15 +181,15 @@ The primary chat model is **Google Gemma 4 (26B-A4B-it)** running via native ROC
 - **Endpoint:** `http://llm-gemma26b-service.llm:8000`
 
 #### Visual Generative AI Microservice (`llm-flux2`)
-Ultra-fast, headless diffusion image generation is provided by **FLUX.2 Klein 4B** (`black-forest-labs/FLUX.2-klein-4B`) running via **vLLM-Omni ROCm** inside [`llm/llm-flux2`](llm/llm-flux2/):
+Ultra-fast, headless diffusion image generation is provided by **FLUX.2 Klein 9B** (`black-forest-labs/FLUX.2-klein-9B`) running via **vLLM-Omni ROCm** inside [`llm/llm-flux2`](llm/llm-flux2/):
 - **Runtime Image:** `docker.io/vllm/vllm-omni-rocm:v0.28.0` (serving on port `8000`)
 - **ROCm Hardware Acceleration:** AMD Strix Halo APU (`distiller`, GFX1151) with `HSA_OVERRIDE_GFX_VERSION: "11.5.1"`, `VLLM_TARGET_DEVICE: "rocm"`, and `--enforce-eager`.
-- **Model Architecture:** 4-step distilled diffusion pipeline combining a 4B parameter DiT with the Qwen3 4B causal text encoder and `AutoencoderKLFlux2`.
-- **Inference Speed:** **~2.5 seconds** per image (at `num_inference_steps=4`).
-- **Resource Allocation:** Requests `4 CPU` / `8 GiB RAM`, Limits `16 CPU` / `22 GiB RAM` (~10 GiB active footprint, completely preventing OS-level memory pressure).
+- **Model Architecture:** 4-step distilled diffusion pipeline combining a 9B parameter DiT with the Qwen3 8B causal text encoder and `AutoencoderKLFlux2`.
+- **Inference Speed:** **~6–8 seconds** per image (at `num_inference_steps=4`, 512×512).
+- **Resource Allocation:** Requests `4 CPU` / `16 GiB RAM`, Limits `16 CPU` / `48 GiB RAM` (~34 GiB active footprint, completely preventing OS-level memory pressure).
 - **API Surface & Integration:**
   - **Standard OpenAI API:** Exposes native OpenAI endpoints `POST /v1/images/generations` and `POST /v1/images/edits`.
-  - **LiteLLM Gateway Routing:** Registered in LiteLLM router (`llm-router`) under `black-forest-labs/FLUX.2-klein-4B` and alias `flux-2-klein` with `mode: image_generation`.
+  - **LiteLLM Gateway Routing:** Registered in LiteLLM router (`llm-router`) under `black-forest-labs/FLUX.2-klein-9B` and alias `flux-2-klein` with `mode: image_generation`.
   - **Open-WebUI Direct Integration:** Connected directly through the LiteLLM gateway (`image_generation.engine: 'openai'`), enabling seamless instant image generation directly in chat.
 - **Network Endpoints:**
   - Cluster Internal: `http://llm-flux2-service.llm:8000`

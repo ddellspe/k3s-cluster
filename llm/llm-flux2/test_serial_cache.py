@@ -25,7 +25,7 @@ from typing import Tuple
 import requests
 
 API_BASE = "http://192.168.2.7:30810"
-MODEL_NAME = "black-forest-labs/FLUX.2-klein-4B"
+MODEL_NAME = "black-forest-labs/FLUX.2-klein-9B"
 
 
 def get_png_dimensions(data: bytes) -> Tuple[int, int]:

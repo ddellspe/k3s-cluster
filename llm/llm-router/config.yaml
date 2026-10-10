@@ -8,9 +8,17 @@ model_list:
       supports_reasoning: true
       supports_function_calling: true
 
+  - model_name: black-forest-labs/FLUX.2-klein-9B
+    litellm_params:
+      model: openai/black-forest-labs/FLUX.2-klein-9B
+      api_base: http://llm-flux2-service.llm:8000/v1
+      api_key: "dummy"
+    model_info:
+      mode: image_generation
+
   - model_name: black-forest-labs/FLUX.2-klein-4B
     litellm_params:
-      model: openai/black-forest-labs/FLUX.2-klein-4B
+      model: openai/black-forest-labs/FLUX.2-klein-9B
       api_base: http://llm-flux2-service.llm:8000/v1
       api_key: "dummy"
     model_info:
@@ -18,7 +26,7 @@ model_list:
 
   - model_name: flux-2-klein
     litellm_params:
-      model: openai/black-forest-labs/FLUX.2-klein-4B
+      model: openai/black-forest-labs/FLUX.2-klein-9B
       api_base: http://llm-flux2-service.llm:8000/v1
       api_key: "dummy"
     model_info:
@@ -31,6 +39,8 @@ router_settings:
 
 general_settings:
   alerting: ["email"]
+  store_model_in_db: true
+  store_prompts_in_spend_logs: true
 
 litellm_settings:
   drop_params: true

@@ -48,7 +48,7 @@ scrape_configs:
       - targets: ['llm-flux2-service.llm:8000']
         labels:
           instance: 'llm-flux2'
-          model: 'black-forest-labs/FLUX.2-klein-4B'
+          model: 'black-forest-labs/FLUX.2-klein-9B'
           app: 'llm-flux2'
 
   - job_name: 'docker'
