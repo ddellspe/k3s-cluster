@@ -33,7 +33,8 @@ spec:
             --omni \
             --host 0.0.0.0 \
             --port 8000 \
-            --enforce-eager
+            --enforce-eager \
+            --diffusion-config '{"cache_backend": "tea_cache", "cache_config": {"rel_l1_thresh": 0.25}}'
         env:
         - name: HSA_OVERRIDE_GFX_VERSION
           value: "11.5.1"
@@ -41,6 +42,12 @@ spec:
           value: "0"
         - name: VLLM_TARGET_DEVICE
           value: "rocm"
+        - name: DIFFUSION_CACHE_BACKEND
+          value: "tea_cache"
+        - name: OMNI_DIFFUSION_PROMPT_EMBED_CACHE
+          value: "1"
+        - name: OMNI_DIFFUSION_PROMPT_EMBED_CACHE_SIZE
+          value: "64"
         - name: HF_TOKEN
           valueFrom:
             secretKeyRef:
