@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: open-webui-patch
+  namespace: llm
+data:
+  patch_images.py: |
+    import re
+    import sys
+    import os
+
+    TARGET = "/app/backend/open_webui/routers/images.py"
+
+    if not os.path.exists(TARGET):
+        print(f"Target file {TARGET} does not exist, skipping patch.")
+        sys.exit(0)
+
+    with open(TARGET, "r") as f:
+        content = f.read()
+
+    # 1. Replace normalize_openai_edit_image_data_url with aspect-ratio downscaler & multiple-of-16 alignment
+    NEW_FUNC_BODY = '''def normalize_openai_edit_image_data_url(data_url: str) -> str:
+        if not data_url.startswith("data:") or "," not in data_url:
+            return data_url
+
+        header, encoded = data_url.split(",", 1)
+        try:
+            import os
+            max_dim = int(os.getenv("IMAGE_EDIT_MAX_DIM", os.getenv("FILE_IMAGE_COMPRESSION_WIDTH", "768")))
+            image_bytes = base64.b64decode(encoded)
+            with Image.open(io.BytesIO(image_bytes)) as image:
+                image = ImageOps.exif_transpose(image)
+                if image.mode in ("RGBA", "LA"):
+                    bg = Image.new("RGB", image.size, (255, 255, 255))
+                    bg.paste(image, mask=image.split()[-1])
+                    image = bg
+                elif image.mode != "RGB":
+                    image = image.convert("RGB")
+
+                w, h = image.size
+                scale = min(1.0, max_dim / max(w, h))
+                new_w = int(w * scale)
+                new_h = int(h * scale)
+
+                # Snap dimensions to multiples of 16 (required for diffusion VAEs like FLUX)
+                new_w = max(16, (new_w // 16) * 16)
+                new_h = max(16, (new_h // 16) * 16)
+
+                if (new_w, new_h) != (w, h):
+                    log.info(f"Downscaling edit image from {w}x{h} to {new_w}x{new_h} (max_dim={max_dim})")
+                    image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+                output = io.BytesIO()
+                image.save(output, format="PNG")
+                normalized_image = base64.b64encode(output.getvalue()).decode("utf-8")
+                return f"data:image/png;base64,{normalized_image}"
+        except Exception as e:
+            log.warning(f"Image edit normalization error: {e}")
+            return data_url
+    '''
+
+    pattern = r'def normalize_openai_edit_image_data_url\(data_url: str\) -> str:.*?(?=\ndef get_image_file_item)'
+    if re.search(pattern, content, re.DOTALL):
+        content = re.sub(pattern, NEW_FUNC_BODY.strip() + "\n\n", content, flags=re.DOTALL)
+        print("Successfully patched normalize_openai_edit_image_data_url")
+    else:
+        print("normalize_openai_edit_image_data_url already patched or pattern changed")
+
+    # 2. In image_edits, forward num_inference_steps and IMAGES_OPENAI_API_PARAMS
+    TARGET_DATA = "else {'response_format': 'b64_json'}\n                ),\n            }"
+    REPLACEMENT_DATA = "else {'response_format': 'b64_json'}\n                ),\n                'num_inference_steps': getattr(image_config, 'IMAGE_STEPS', 4) or 4,\n                **({} if not getattr(image_config, 'IMAGES_OPENAI_API_PARAMS', None) else image_config.IMAGES_OPENAI_API_PARAMS),\n            }"
+
+    if TARGET_DATA in content:
+        content = content.replace(TARGET_DATA, REPLACEMENT_DATA, 1)
+        print("Successfully patched image_edits to forward num_inference_steps & IMAGES_OPENAI_API_PARAMS")
+    else:
+        print("image_edits data block already patched or pattern changed")
+
+    with open(TARGET, "w") as f:
+        f.write(content)
+    print("Patch application completed successfully.")

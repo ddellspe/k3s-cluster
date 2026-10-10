@@ -24,6 +24,12 @@ spec:
       - name: open-webui
         image: ghcr.io/open-webui/open-webui:v0.11.4
         imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          python3 /app/backend/patches/patch_images.py || true
+          exec /app/backend/start.sh
         ports:
         - containerPort: 8080
           name: http
@@ -43,6 +49,14 @@ spec:
           value: "ddellspe LLM Gateway"
         - name: DEFAULT_INTERFACE_SETTINGS
           value: '{"richTextInput": false}'
+        - name: FILE_IMAGE_COMPRESSION_WIDTH
+          value: "768"
+        - name: FILE_IMAGE_COMPRESSION_HEIGHT
+          value: "768"
+        - name: IMAGE_EDIT_MAX_DIM
+          value: "768"
+        - name: ENABLE_OPENAI_IMAGE_EDIT_NORMALIZATION
+          value: "True"
         - name: ENABLE_RAG_WEB_SEARCH
           value: "True"
         - name: RAG_WEB_SEARCH_ENGINE
@@ -62,7 +76,7 @@ spec:
         - name: IMAGE_GENERATION_MODEL
           value: "black-forest-labs/FLUX.2-klein-4B"
         - name: IMAGE_SIZE
-          value: "512x512"
+          value: "768x768"
         - name: IMAGE_STEPS
           value: "4"
         - name: IMAGES_OPENAI_API_BASE_URL
@@ -79,7 +93,7 @@ spec:
         - name: IMAGE_EDIT_MODEL
           value: "black-forest-labs/FLUX.2-klein-4B"
         - name: IMAGE_EDIT_SIZE
-          value: "512x512"
+          value: "768x768"
         - name: IMAGES_EDIT_OPENAI_API_BASE_URL
           value: "http://llm-router-service.llm:4000/v1"
         - name: IMAGES_EDIT_OPENAI_API_KEY
@@ -121,8 +135,13 @@ spec:
         volumeMounts:
         - mountPath: /app/backend/data
           name: webui-data
+        - mountPath: /app/backend/patches
+          name: webui-patch
       volumes:
       - name: webui-data
         persistentVolumeClaim:
           claimName: open-webui-pvc-hot
+      - name: webui-patch
+        configMap:
+          name: open-webui-patch
 

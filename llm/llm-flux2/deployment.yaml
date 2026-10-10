@@ -28,6 +28,7 @@ spec:
         - -c
         - |
           echo "Starting FLUX.2 Klein 4B on vLLM-Omni ROCm..."
+          sed -i 's/50 if req.sampling_params.num_inference_steps is None/4 if req.sampling_params.num_inference_steps is None/g' /usr/local/lib/python3.12/dist-packages/vllm_omni/diffusion/models/flux2_klein/pipeline_flux2_klein.py || true
           exec python3 -m vllm_omni.entrypoints.cli.main serve black-forest-labs/FLUX.2-klein-4B \
             --omni \
             --host 0.0.0.0 \
@@ -54,17 +55,22 @@ spec:
             port: 8000
           initialDelaySeconds: 30
           periodSeconds: 10
+          timeoutSeconds: 5
           failureThreshold: 30
         readinessProbe:
           httpGet:
             path: /health
             port: 8000
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
         livenessProbe:
           httpGet:
             path: /health
             port: 8000
-          periodSeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 10
+          failureThreshold: 6
         securityContext:
           privileged: true
         volumeMounts:
