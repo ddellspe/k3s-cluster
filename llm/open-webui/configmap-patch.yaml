@@ -66,7 +66,7 @@ data:
     else:
         print("normalize_openai_edit_image_data_url already patched or pattern changed")
 
-    # 2. In image_edits, forward num_inference_steps and IMAGES_OPENAI_API_PARAMS
+    # 2. In image_edits, forward num_inference_steps, IMAGES_OPENAI_API_PARAMS, and preserve aspect ratio size
     TARGET_DATA = "else {'response_format': 'b64_json'}\n                ),\n            }"
     REPLACEMENT_DATA = "else {'response_format': 'b64_json'}\n                ),\n                'num_inference_steps': getattr(image_config, 'IMAGE_STEPS', 4) or 4,\n                **({} if not getattr(image_config, 'IMAGES_OPENAI_API_PARAMS', None) else image_config.IMAGES_OPENAI_API_PARAMS),\n            }"
 
@@ -76,6 +76,30 @@ data:
     else:
         print("image_edits data block already patched or pattern changed")
 
+    # 3. In image_edits, if user did not explicitly supply form_data.size, infer exact dimensions from normalized image
+    TARGET_SIZE_INFER = "url_search_params = ''\n            if image_config.IMAGES_EDIT_OPENAI_API_VERSION:"
+    REPLACEMENT_SIZE_INFER = (
+        "if not form_data.size and files:\n"
+        "                try:\n"
+        "                    f_io = files[0][1][1]\n"
+        "                    f_pos = f_io.tell()\n"
+        "                    with Image.open(f_io) as _pimg:\n"
+        "                        data['size'] = f\"{_pimg.width}x{_pimg.height}\"\n"
+        "                    f_io.seek(f_pos)\n"
+        "                    log.info(f\"Preserving image edit aspect ratio with size: {data['size']}\")\n"
+        "                except Exception as _e:\n"
+        "                    log.warning(f\"Failed to infer size from edit image: {_e}\")\n\n"
+        "            url_search_params = ''\n"
+        "            if image_config.IMAGES_EDIT_OPENAI_API_VERSION:"
+    )
+
+    if TARGET_SIZE_INFER in content:
+        content = content.replace(TARGET_SIZE_INFER, REPLACEMENT_SIZE_INFER, 1)
+        print("Successfully patched image_edits to infer size from normalized image")
+    else:
+        print("image_edits size inference block already patched or pattern changed")
+
     with open(TARGET, "w") as f:
         f.write(content)
     print("Patch application completed successfully.")
+

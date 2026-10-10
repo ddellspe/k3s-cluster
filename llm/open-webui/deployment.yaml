@@ -93,7 +93,7 @@ spec:
         - name: IMAGE_EDIT_MODEL
           value: "black-forest-labs/FLUX.2-klein-4B"
         - name: IMAGE_EDIT_SIZE
-          value: "768x768"
+          value: ""
         - name: IMAGES_EDIT_OPENAI_API_BASE_URL
           value: "http://llm-router-service.llm:4000/v1"
         - name: IMAGES_EDIT_OPENAI_API_KEY
