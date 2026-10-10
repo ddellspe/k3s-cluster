@@ -103,7 +103,26 @@ data:
         f.write(content)
     print("Patch application completed successfully.")
 
-    # 4. Sync Audio Configuration into SQLite config table
+    # 4. Patch audio.py get_available_voices to fetch voices from Kokoro when routed through LiteLLM
+    AUDIO_TARGET = "/app/backend/open_webui/routers/audio.py"
+    if os.path.exists(AUDIO_TARGET):
+        try:
+            with open(AUDIO_TARGET, "r") as f:
+                audio_content = f.read()
+
+            OLD_VOICES_CALL = "f'{base_url}/audio/voices'"
+            NEW_VOICES_CALL = "('http://llm-kokoro-service.llm:8880/v1/audio/voices' if ('llm-router' in base_url or '4000' in base_url) else f'{base_url}/audio/voices')"
+            if OLD_VOICES_CALL in audio_content:
+                audio_content = audio_content.replace(OLD_VOICES_CALL, NEW_VOICES_CALL, 1)
+                with open(AUDIO_TARGET, "w") as f:
+                    f.write(audio_content)
+                print("Successfully patched get_available_voices for LiteLLM routing.")
+            else:
+                print("audio.py voices call already patched or pattern changed.")
+        except Exception as e:
+            print(f"Failed to patch audio.py: {e}")
+
+    # 5. Sync Audio Configuration into SQLite config table
     try:
         import sqlite3, json, time
         db_path = "/app/backend/data/webui.db"
@@ -111,16 +130,21 @@ data:
             conn = sqlite3.connect(db_path)
             c = conn.cursor()
             now = int(time.time())
+            tts_base_url = os.getenv('AUDIO_TTS_OPENAI_API_BASE_URL', 'http://llm-router-service.llm:4000/v1')
+            tts_key = os.getenv('AUDIO_TTS_OPENAI_API_KEY', os.getenv('OPENAI_API_KEYS', ''))
+            stt_base_url = os.getenv('AUDIO_STT_OPENAI_API_BASE_URL', 'http://llm-router-service.llm:4000/v1')
+            stt_key = os.getenv('AUDIO_STT_OPENAI_API_KEY', os.getenv('OPENAI_API_KEYS', ''))
+
             audio_settings = {
                 'audio.tts.engine': json.dumps('openai'),
                 'audio.tts.model': json.dumps('kokoro'),
                 'audio.tts.voice': json.dumps('af_bella'),
-                'audio.tts.openai.api_base_url': json.dumps('http://llm-kokoro-service.llm:8880/v1'),
-                'audio.tts.openai.api_key': json.dumps('dummy'),
+                'audio.tts.openai.api_base_url': json.dumps(tts_base_url),
+                'audio.tts.openai.api_key': json.dumps(tts_key),
                 'audio.stt.engine': json.dumps('openai'),
                 'audio.stt.model': json.dumps('whisper-1'),
-                'audio.stt.openai.api_base_url': json.dumps('http://llm-whisper-service.llm:8000/v1'),
-                'audio.stt.openai.api_key': json.dumps('dummy')
+                'audio.stt.openai.api_base_url': json.dumps(stt_base_url),
+                'audio.stt.openai.api_key': json.dumps(stt_key)
             }
             for k, v in audio_settings.items():
                 c.execute('INSERT INTO config (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at', (k, v, now))
@@ -129,4 +153,5 @@ data:
             print("Successfully synced audio configuration into SQLite webui.db.")
     except Exception as e:
         print(f"Failed to sync audio configuration into SQLite: {e}")
+
 
