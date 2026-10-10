@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-whisper
+  namespace: llm
+  labels:
+    app: llm-whisper
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: llm-whisper
+  template:
+    metadata:
+      labels:
+        app: llm-whisper
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "well"
+      containers:
+      - name: speaches
+        image: ghcr.io/speaches-ai/speaches:latest-cpu
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: WHISPER__MODEL
+          value: "Systran/faster-whisper-small"
+        - name: WHISPER__INFERENCE_DEVICE
+          value: "cpu"
+        - name: WHISPER__COMPUTE_TYPE
+          value: "int8"
+        - name: WHISPER__CPU_THREADS
+          value: "4"
+        ports:
+        - containerPort: 8000
+          name: http
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 20
+          timeoutSeconds: 10
+          failureThreshold: 5
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "3000m"
+            memory: "2Gi"
+        volumeMounts:
+        - mountPath: /home/speaches/.cache
+          name: model-cache
+      volumes:
+      - name: model-cache
+        emptyDir: {}

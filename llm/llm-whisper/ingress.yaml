@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: llm-whisper-ingress
+  namespace: llm
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  rules:
+  - host: whisper.ddellspe.dev
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: llm-whisper-service
+            port:
+              number: 8000
+  tls:
+  - hosts:
+    - whisper.ddellspe.dev
+    secretName: ddellspe-tls

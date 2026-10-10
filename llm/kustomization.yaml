@@ -12,6 +12,8 @@ resources:
   - llm-router
   - laya
   - llm-flux2
+  - llm-kokoro
+  - llm-whisper
 
 
 

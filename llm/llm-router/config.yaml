@@ -32,6 +32,38 @@ model_list:
     model_info:
       mode: image_generation
 
+  - model_name: kokoro
+    litellm_params:
+      model: openai/kokoro
+      api_base: http://llm-kokoro-service.llm:8880/v1
+      api_key: "dummy"
+    model_info:
+      mode: audio_speech
+
+  - model_name: tts-1
+    litellm_params:
+      model: openai/kokoro
+      api_base: http://llm-kokoro-service.llm:8880/v1
+      api_key: "dummy"
+    model_info:
+      mode: audio_speech
+
+  - model_name: whisper-1
+    litellm_params:
+      model: openai/whisper-1
+      api_base: http://llm-whisper-service.llm:8000/v1
+      api_key: "dummy"
+    model_info:
+      mode: audio_transcription
+
+  - model_name: Systran/faster-whisper-small
+    litellm_params:
+      model: openai/Systran/faster-whisper-small
+      api_base: http://llm-whisper-service.llm:8000/v1
+      api_key: "dummy"
+    model_info:
+      mode: audio_transcription
+
 
 
 router_settings:

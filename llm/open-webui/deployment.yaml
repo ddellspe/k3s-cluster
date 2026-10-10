@@ -101,6 +101,24 @@ spec:
             secretKeyRef:
               name: llm-router-key
               key: master-key
+        - name: AUDIO_TTS_ENGINE
+          value: "openai"
+        - name: AUDIO_TTS_MODEL
+          value: "kokoro"
+        - name: AUDIO_TTS_VOICE
+          value: "af_bella"
+        - name: AUDIO_TTS_OPENAI_API_BASE_URL
+          value: "http://llm-kokoro-service.llm:8880/v1"
+        - name: AUDIO_TTS_OPENAI_API_KEY
+          value: "dummy"
+        - name: AUDIO_STT_ENGINE
+          value: "openai"
+        - name: AUDIO_STT_MODEL
+          value: "whisper-1"
+        - name: AUDIO_STT_OPENAI_API_BASE_URL
+          value: "http://llm-whisper-service.llm:8000/v1"
+        - name: AUDIO_STT_OPENAI_API_KEY
+          value: "dummy"
         startupProbe:
           httpGet:
             path: /health

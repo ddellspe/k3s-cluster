@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-kokoro
+  namespace: llm
+  labels:
+    app: llm-kokoro
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: llm-kokoro
+  template:
+    metadata:
+      labels:
+        app: llm-kokoro
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "well"
+      containers:
+      - name: kokoro-fastapi
+        image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: API_LOG_LEVEL
+          value: "INFO"
+        - name: ONNX_NUM_THREADS
+          value: "4"
+        ports:
+        - containerPort: 8880
+          name: http
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8880
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 20
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8880
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8880
+          periodSeconds: 20
+          timeoutSeconds: 10
+          failureThreshold: 5
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "3000m"
+            memory: "2Gi"

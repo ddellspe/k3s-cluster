@@ -219,6 +219,29 @@ For instantaneous structured decision making (filtering, sentiment, binary class
     - External Ingress: `https://laya.ddellspe.dev/mcp`
     - **Open-WebUI Tool Integration**: Registered as an external tool server (`id: laya`, type: `mcp`) exposing 8 native decision tools: `laya_status`, `laya_decide`, `laya_predict`, `laya_predict_batch`, `laya_preset` (guard, email, triage, etc.), `laya_shortlist`, `laya_route`, and `laya_route_batch`.
 
+#### Audio Generative AI & Speech Microservices (`llm-kokoro` & `llm-whisper`)
+Lightweight, dedicated edge-speech processing is offloaded to the Raspberry Pi 5 worker node (`well`, 4-core Cortex-A76 ARM64, 16 GiB RAM):
+- **Text-to-Speech (TTS): Kokoro-82M (`llm-kokoro`)**
+  - **Runtime Image:** `ghcr.io/remsky/kokoro-fastapi-cpu:latest` (serving on port `8880`)
+  - **Model:** Kokoro-82M ONNX runtime with ARM NEON SIMD vector optimization.
+  - **Latency:** Sub-second streaming synthesis (~5–8x faster than real-time on CPU).
+  - **Endpoints:**
+    - Cluster Internal: `http://llm-kokoro-service.llm:8880/v1`
+    - NodePort: `http://192.168.2.204:30880`
+    - Ingress: `https://tts.ddellspe.dev`
+- **Speech-to-Text (STT): Faster-Whisper (`llm-whisper`)**
+  - **Runtime Image:** `ghcr.io/speaches-ai/speaches:latest-cpu` (serving on port `8000`)
+  - **Model:** `Systran/faster-whisper-small` with CTranslate2 INT8 quantization.
+  - **Latency:** Real-time transcription via CPU NEON.
+  - **Endpoints:**
+    - Cluster Internal: `http://llm-whisper-service.llm:8000/v1`
+    - NodePort: `http://192.168.2.204:30890`
+    - Ingress: `https://whisper.ddellspe.dev`
+- **Routing & Client Integrations:**
+  - **LiteLLM Gateway:** Exposes `kokoro` / `tts-1` (`mode: audio_speech`) and `whisper-1` / `Systran/faster-whisper-small` (`mode: audio_transcription`).
+  - **Open-WebUI:** Integrated for hands-free voice-to-voice interaction in chat via native OpenAI audio endpoints.
+
+
 #### Combined Active Footprint
 - **Total Unified VRAM Utilization:** Gemma 26B (~60 GiB) + FLUX.1-schnell (~31.4 GiB) + Laya (~1.2 GiB) = ~92.6 GiB total (~75% of Strix Halo unified memory pool).
 - **Headroom:** Leaves ~30 GiB of headroom for the OS kernel, page caches, build tasks (DinD ARC runners), and system daemons (`node-exporter`, `caretta` eBPF).
