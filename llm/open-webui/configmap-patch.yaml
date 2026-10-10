@@ -103,3 +103,30 @@ data:
         f.write(content)
     print("Patch application completed successfully.")
 
+    # 4. Sync Audio Configuration into SQLite config table
+    try:
+        import sqlite3, json, time
+        db_path = "/app/backend/data/webui.db"
+        if os.path.exists(db_path):
+            conn = sqlite3.connect(db_path)
+            c = conn.cursor()
+            now = int(time.time())
+            audio_settings = {
+                'audio.tts.engine': json.dumps('openai'),
+                'audio.tts.model': json.dumps('kokoro'),
+                'audio.tts.voice': json.dumps('af_bella'),
+                'audio.tts.openai.api_base_url': json.dumps('http://llm-kokoro-service.llm:8880/v1'),
+                'audio.tts.openai.api_key': json.dumps('dummy'),
+                'audio.stt.engine': json.dumps('openai'),
+                'audio.stt.model': json.dumps('whisper-1'),
+                'audio.stt.openai.api_base_url': json.dumps('http://llm-whisper-service.llm:8000/v1'),
+                'audio.stt.openai.api_key': json.dumps('dummy')
+            }
+            for k, v in audio_settings.items():
+                c.execute('INSERT INTO config (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at', (k, v, now))
+            conn.commit()
+            conn.close()
+            print("Successfully synced audio configuration into SQLite webui.db.")
+    except Exception as e:
+        print(f"Failed to sync audio configuration into SQLite: {e}")
+
