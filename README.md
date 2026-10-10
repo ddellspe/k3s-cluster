@@ -70,10 +70,10 @@ k3s-cluster/
 │   │   ├── statefulset.yaml               # Pinned to well with 10Gi storage-hot (NVMe)
 │   │   ├── service.yaml                   # ClusterIP port 5432
 │   │   └── kustomization.yaml
-│   ├── comfyui/                           # ComfyUI Visual GenAI Studio via ROCm 7 (Strix Halo APU)
-│   │   ├── deployment.yaml                # yanwk/comfyui-boot:rocm7 pinned to distiller (RDNA 3.5 APU)
-│   │   ├── service.yaml                   # ClusterIP port 8188 & NodePort 30818
-│   │   ├── ingress.yaml                   # comfy.ddellspe.dev (ddellspe-tls)
+│   ├── llm-flux2/                         # FLUX.2 Klein 4B Diffusion via vLLM-Omni ROCm (Strix Halo APU)
+│   │   ├── deployment.yaml                # vllm/vllm-omni-rocm:v0.28.0 pinned to distiller
+│   │   ├── service.yaml                   # ClusterIP port 8000 & NodePort 30810
+│   │   ├── ingress.yaml                   # flux.ddellspe.dev (ddellspe-tls)
 │   │   └── kustomization.yaml
 │   ├── laya/                              # Fast "System 1" Decision Model via ROCm (ModernBERT-large)
 │   │   ├── deployment.yaml                # ROCm accelerated ModernBERT/Laya service
@@ -180,20 +180,21 @@ The primary chat model is **Google Gemma 4 (26B-A4B-it)** running via native ROC
 - **K8s Resources:** Requests `52 GiB` RAM / 4 CPU; Limits `80 GiB` RAM / 16 CPU
 - **Endpoint:** `http://llm-gemma26b-service.llm:8000`
 
-#### Visual Generative AI Studio (`comfyui`)
-Flexible, multi-architecture visual generation and workflow execution is provided by **ComfyUI** running via ROCm 7 inside [`llm/comfyui`](llm/comfyui/):
-- **Runtime Image:** `docker.io/yanwk/comfyui-boot:rocm7` (serving on port `8188`)
-- **ROCm Hardware Acceleration:** AMD Strix Halo APU (`distiller`, GFX1151) with `HSA_OVERRIDE_GFX_VERSION: "11.5.1"`, PyTorch cross-attention, and RDNA 3.5 driver flags (`HSA_ENABLE_SDMA=0`, `HSA_USE_SVM=0`).
-- **Model Support:** Supports any modern diffusion/DiT checkpoint (FLUX.1/2, SD 3.5, SDXL, Wan 2.1, Hunyuan, LoRAs, ControlNets, and upscalers).
-- **Persistent Storage:** Persistent HostPath at `/var/lib/rancher/k3s/storage/comfyui` mounted to `/root` for models (`/root/ComfyUI/models`), custom nodes, inputs, and outputs.
-- **Resource Allocation:** Requests `4 CPU` / `16 GiB RAM`, Limits `16 CPU` / `48 GiB RAM`.
-- **Generation Interfaces (Dual Modes):**
-  - **Direct Visual Node Editor:** Full interactive browser GUI at `https://comfy.ddellspe.dev` for visual workflow composition, parameter tuning, and image/video experimentation.
-  - **Headless Open-WebUI Integration:** Connected to Open-WebUI via native ComfyUI engine (`image_generation.engine: 'comfyui'`) at `http://comfyui-service.llm:8188`, allowing seamless prompt-based generation directly in chat.
+#### Visual Generative AI Microservice (`llm-flux2`)
+Ultra-fast, headless diffusion image generation is provided by **FLUX.2 Klein 4B** (`black-forest-labs/FLUX.2-klein-4B`) running via **vLLM-Omni ROCm** inside [`llm/llm-flux2`](llm/llm-flux2/):
+- **Runtime Image:** `docker.io/vllm/vllm-omni-rocm:v0.28.0` (serving on port `8000`)
+- **ROCm Hardware Acceleration:** AMD Strix Halo APU (`distiller`, GFX1151) with `HSA_OVERRIDE_GFX_VERSION: "11.5.1"`, `VLLM_TARGET_DEVICE: "rocm"`, and `--enforce-eager`.
+- **Model Architecture:** 4-step distilled diffusion pipeline combining a 4B parameter DiT with the Qwen3 4B causal text encoder and `AutoencoderKLFlux2`.
+- **Inference Speed:** **~2.5 seconds** per image (at `num_inference_steps=4`).
+- **Resource Allocation:** Requests `4 CPU` / `8 GiB RAM`, Limits `16 CPU` / `22 GiB RAM` (~10 GiB active footprint, completely preventing OS-level memory pressure).
+- **API Surface & Integration:**
+  - **Standard OpenAI API:** Exposes native OpenAI endpoints `POST /v1/images/generations` and `POST /v1/images/edits`.
+  - **LiteLLM Gateway Routing:** Registered in LiteLLM router (`llm-router`) under `black-forest-labs/FLUX.2-klein-4B` and alias `flux-2-klein` with `mode: image_generation`.
+  - **Open-WebUI Direct Integration:** Connected directly through the LiteLLM gateway (`image_generation.engine: 'openai'`), enabling seamless instant image generation directly in chat.
 - **Network Endpoints:**
-  - Cluster Internal: `http://comfyui-service.llm:8188`
-  - NodePort Endpoint: `http://192.168.2.7:30818`
-  - External Ingress: `https://comfy.ddellspe.dev`
+  - Cluster Internal: `http://llm-flux2-service.llm:8000`
+  - NodePort Endpoint: `http://192.168.2.7:30810`
+  - Ingress: `https://flux.ddellspe.dev`
 
 #### Fast "System 1" Decision Model (`laya`)
 For instantaneous structured decision making (filtering, sentiment, binary classification, ranking rubrics, routing), the cluster hosts **Laya** (`convaiinnovations/laya`), a non-autoregressive decision model built on ModernBERT-large (~395M params):

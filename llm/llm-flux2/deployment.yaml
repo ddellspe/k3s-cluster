@@ -1,62 +1,69 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: comfyui
+  name: llm-flux2
   namespace: llm
   labels:
-    app: comfyui
+    app: llm-flux2
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      app: comfyui
+      app: llm-flux2
   template:
     metadata:
       labels:
-        app: comfyui
+        app: llm-flux2
     spec:
       nodeSelector:
         gpu.family: strix-halo
       containers:
-      - name: comfyui
-        image: docker.io/yanwk/comfyui-boot:rocm7
+      - name: vllm-flux2
+        image: docker.io/vllm/vllm-omni-rocm:v0.28.0
         imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "Starting FLUX.2 Klein 4B on vLLM-Omni ROCm..."
+          exec python3 -m vllm_omni.entrypoints.cli.main serve black-forest-labs/FLUX.2-klein-4B \
+            --omni \
+            --host 0.0.0.0 \
+            --port 8000 \
+            --enforce-eager
         env:
         - name: HSA_OVERRIDE_GFX_VERSION
           value: "11.5.1"
         - name: HIP_VISIBLE_DEVICES
           value: "0"
-        - name: PYTORCH_HIP_ALLOC_CONF
-          value: "garbage_collection_threshold:0.6,max_split_size_mb:128"
-        - name: PYTORCH_ALLOC_CONF
-          value: "garbage_collection_threshold:0.6,max_split_size_mb:128"
-        - name: HSA_ENABLE_SDMA
-          value: "0"
-        - name: HSA_USE_SVM
-          value: "0"
-        - name: CLI_ARGS
-          value: "--listen 0.0.0.0 --port 8188 --use-pytorch-cross-attention --disable-mmap --reserve-vram 72 --cache-ram 4 8"
+        - name: VLLM_TARGET_DEVICE
+          value: "rocm"
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token-secret
+              key: token
         ports:
-        - containerPort: 8188
+        - containerPort: 8000
           name: http
         startupProbe:
           httpGet:
-            path: /
-            port: 8188
+            path: /health
+            port: 8000
           initialDelaySeconds: 30
           periodSeconds: 10
           failureThreshold: 30
         readinessProbe:
           httpGet:
-            path: /
-            port: 8188
+            path: /health
+            port: 8000
           periodSeconds: 10
         livenessProbe:
           httpGet:
-            path: /
-            port: 8188
+            path: /health
+            port: 8000
           periodSeconds: 15
         securityContext:
           privileged: true
@@ -67,8 +74,6 @@ spec:
           name: dev-kfd
         - mountPath: /dev/dri
           name: dev-dri
-        - mountPath: /root
-          name: comfy-storage
         - mountPath: /root/.cache/huggingface
           name: hf-cache
         resources:
@@ -89,10 +94,6 @@ spec:
       - name: dev-dri
         hostPath:
           path: /dev/dri
-      - name: comfy-storage
-        hostPath:
-          path: /var/lib/rancher/k3s/storage/comfyui
-          type: DirectoryOrCreate
       - name: hf-cache
         hostPath:
           path: /var/lib/rancher/k3s/storage/hf-cache

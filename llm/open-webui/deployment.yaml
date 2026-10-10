@@ -58,15 +58,35 @@ spec:
         - name: ENABLE_IMAGE_GENERATION
           value: "True"
         - name: IMAGE_GENERATION_ENGINE
-          value: "comfyui"
-        - name: COMFYUI_BASE_URL
-          value: "http://comfyui-service.llm:8188"
+          value: "openai"
+        - name: IMAGE_GENERATION_MODEL
+          value: "black-forest-labs/FLUX.2-klein-4B"
+        - name: IMAGE_SIZE
+          value: "512x512"
+        - name: IMAGE_STEPS
+          value: "4"
+        - name: IMAGES_OPENAI_API_BASE_URL
+          value: "http://llm-router-service.llm:4000/v1"
+        - name: IMAGES_OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: llm-router-key
+              key: master-key
         - name: ENABLE_IMAGE_EDIT
           value: "True"
         - name: IMAGE_EDIT_ENGINE
-          value: "comfyui"
-        - name: IMAGES_EDIT_COMFYUI_BASE_URL
-          value: "http://comfyui-service.llm:8188"
+          value: "openai"
+        - name: IMAGE_EDIT_MODEL
+          value: "black-forest-labs/FLUX.2-klein-4B"
+        - name: IMAGE_EDIT_SIZE
+          value: "512x512"
+        - name: IMAGES_EDIT_OPENAI_API_BASE_URL
+          value: "http://llm-router-service.llm:4000/v1"
+        - name: IMAGES_EDIT_OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: llm-router-key
+              key: master-key
         startupProbe:
           httpGet:
             path: /health

@@ -1,16 +1,16 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: comfyui-service
+  name: llm-flux2-service
   namespace: llm
   labels:
-    app: comfyui
+    app: llm-flux2
 spec:
   type: NodePort
   selector:
-    app: comfyui
+    app: llm-flux2
   ports:
   - name: http
-    port: 8188
-    targetPort: 8188
-    nodePort: 30818
+    port: 8000
+    targetPort: 8000
+    nodePort: 30810

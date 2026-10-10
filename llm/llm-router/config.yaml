@@ -8,6 +8,22 @@ model_list:
       supports_reasoning: true
       supports_function_calling: true
 
+  - model_name: black-forest-labs/FLUX.2-klein-4B
+    litellm_params:
+      model: openai/black-forest-labs/FLUX.2-klein-4B
+      api_base: http://llm-flux2-service.llm:8000/v1
+      api_key: "dummy"
+    model_info:
+      mode: image_generation
+
+  - model_name: flux-2-klein
+    litellm_params:
+      model: openai/black-forest-labs/FLUX.2-klein-4B
+      api_base: http://llm-flux2-service.llm:8000/v1
+      api_key: "dummy"
+    model_info:
+      mode: image_generation
+
 
 
 router_settings:
@@ -17,7 +33,7 @@ general_settings:
   alerting: ["email"]
 
 litellm_settings:
-  drop_params: false
+  drop_params: true
   require_auth_for_metrics_endpoint: false
   success_callback: ["prometheus"]
   failure_callback: ["prometheus"]
