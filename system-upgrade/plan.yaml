@@ -15,6 +15,179 @@ spec:
   serviceAccountName: system-upgrade
   upgrade:
     image: rancher/k3s-upgrade
+    command:
+    - /bin/sh
+    - -c
+    args:
+    - |
+      set -e
+
+      info() { echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') $*"; }
+      error() { echo "[ERROR] $(date '+%Y-%m-%d %H:%M:%S') $*" >&2; }
+
+      info "Starting robust K3s node upgrade wrapper..."
+
+      # 1. Identify running K3s service and PID
+      SVC=""
+      if chroot /host systemctl is-active --quiet k3s.service; then
+        SVC="k3s.service"
+      elif chroot /host systemctl is-active --quiet k3s-agent.service; then
+        SVC="k3s-agent.service"
+      fi
+
+      if [ -n "$SVC" ]; then
+        K3S_PID=$(chroot /host systemctl show -p MainPID --value "$SVC" 2>/dev/null || true)
+        info "Detected systemd service: $SVC (MainPID: $K3S_PID)"
+      fi
+
+      if [ -z "$K3S_PID" ] || [ "$K3S_PID" = "0" ]; then
+        K3S_PID=$(ps -ef | grep -E "( |/)k3s .*(server|agent)" | grep -E -v "(init|grep|channelserver|supervise-daemon)" | awk '{print $2}' | head -n1)
+        info "Detected K3s PID via process scan: $K3S_PID"
+      fi
+
+      if [ -z "$K3S_PID" ] || [ "$K3S_PID" = "0" ]; then
+        error "No running K3s process found on this host!"
+        exit 1
+      fi
+
+      # 2. Identify binary paths and versions
+      NEW_BIN="/opt/k3s"
+      if [ ! -f "$NEW_BIN" ]; then
+        error "Target binary $NEW_BIN not found in container!"
+        exit 1
+      fi
+
+      K3S_BIN_PATH=$(tr '\0' '\n' < "/host/proc/${K3S_PID}/cmdline" 2>/dev/null | head -n1 || true)
+      if [ -z "$K3S_BIN_PATH" ] || [ ! -e "/host$K3S_BIN_PATH" ]; then
+        K3S_BIN_PATH="/usr/local/bin/k3s"
+      fi
+      HOST_BIN="/host$K3S_BIN_PATH"
+
+      TARGET_TAG=$($NEW_BIN -v 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+' | head -n1)
+      RUNNING_TAG=""
+      if [ -e "/proc/${K3S_PID}/exe" ]; then
+        RUNNING_TAG=$(/proc/${K3S_PID}/exe -v 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+' | head -n1 || true)
+      fi
+
+      info "Target version tag:  $TARGET_TAG"
+      info "Running version tag: $RUNNING_TAG (PID $K3S_PID)"
+
+      # 3. Check if binary replacement is required
+      NEED_COPY=false
+      if [ ! -f "$HOST_BIN" ]; then
+        NEED_COPY=true
+      else
+        SUM_NEW=$(sha256sum "$NEW_BIN" | awk '{print $1}')
+        SUM_HOST=$(sha256sum "$HOST_BIN" | awk '{print $1}')
+        if [ "$SUM_NEW" != "$SUM_HOST" ]; then
+          NEED_COPY=true
+        fi
+      fi
+
+      if [ "$NEED_COPY" = "true" ]; then
+        info "Replacing host binary at $HOST_BIN (SHA256: $SUM_NEW)..."
+        cp "$NEW_BIN" "${HOST_BIN}.tmp"
+        chmod 755 "${HOST_BIN}.tmp"
+        sync
+        mv -f "${HOST_BIN}.tmp" "$HOST_BIN"
+        sync
+        info "Host binary replaced and synced successfully."
+      else
+        info "Host binary at $HOST_BIN matches target binary checksum ($SUM_NEW)."
+      fi
+
+      # 4. Check if service restart is required
+      if [ -n "$RUNNING_TAG" ] && [ "$RUNNING_TAG" = "$TARGET_TAG" ]; then
+        info "Node is already running target version $TARGET_TAG. No restart required."
+        exit 0
+      fi
+
+      info "Running daemon version ($RUNNING_TAG) does not match target ($TARGET_TAG). Restarting service..."
+      OLD_PID="$K3S_PID"
+
+      # 5. Initiate restart
+      if [ -n "$SVC" ]; then
+        info "Initiating systemctl restart for $SVC (non-blocking)..."
+        chroot /host systemctl restart "$SVC" --no-block || kill -SIGTERM "$OLD_PID"
+      else
+        info "Sending SIGTERM to PID $OLD_PID..."
+        kill -SIGTERM "$OLD_PID"
+      fi
+
+      # 6. Wait for OLD_PID to terminate
+      info "Waiting for old PID $OLD_PID to terminate..."
+      TERMINATED=false
+      for i in $(seq 1 45); do
+        if ! kill -0 "$OLD_PID" 2>/dev/null; then
+          TERMINATED=true
+          info "Old PID $OLD_PID has terminated."
+          break
+        fi
+        sleep 1
+      done
+
+      if [ "$TERMINATED" != "true" ]; then
+        info "Old PID $OLD_PID did not exit after 45s. Sending SIGKILL..."
+        kill -SIGKILL "$OLD_PID" 2>/dev/null || true
+        sleep 2
+      fi
+
+      # 7. Wait for service to restart and become active
+      info "Waiting for K3s service to restart and report active..."
+      STARTED=false
+      NEW_PID=""
+
+      for i in $(seq 1 90); do
+        sleep 2
+        if [ -n "$SVC" ]; then
+          STATE=$(chroot /host systemctl is-active "$SVC" 2>/dev/null || true)
+          CUR_PID=$(chroot /host systemctl show -p MainPID --value "$SVC" 2>/dev/null || true)
+          if [ "$STATE" = "active" ] && [ -n "$CUR_PID" ] && [ "$CUR_PID" != "0" ] && [ "$CUR_PID" != "$OLD_PID" ]; then
+            NEW_PID="$CUR_PID"
+            STARTED=true
+            break
+          fi
+        else
+          CUR_PID=$(ps -ef | grep -E "( |/)k3s .*(server|agent)" | grep -E -v "(init|grep|channelserver|supervise-daemon)" | awk '{print $2}' | head -n1)
+          if [ -n "$CUR_PID" ] && [ "$CUR_PID" != "$OLD_PID" ]; then
+            NEW_PID="$CUR_PID"
+            STARTED=true
+            break
+          fi
+        fi
+        info "[$i/90] Waiting for service to report active with new PID (state: ${STATE:-unknown}, PID: ${CUR_PID:-none})..."
+      done
+
+      if [ "$STARTED" != "true" ]; then
+        error "Timed out waiting for K3s service to restart!"
+        exit 1
+      fi
+
+      info "K3s service is active with new PID $NEW_PID."
+
+      # 8. Verify running binary version of the new process
+      VERIFIED=false
+      for i in $(seq 1 15); do
+        CUR_TAG=""
+        if [ -e "/proc/${NEW_PID}/exe" ]; then
+          CUR_TAG=$(/proc/${NEW_PID}/exe -v 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+' | head -n1 || true)
+        fi
+        if [ "$CUR_TAG" = "$TARGET_TAG" ]; then
+          VERIFIED=true
+          info "Verified: running process PID $NEW_PID is successfully running $TARGET_TAG!"
+          break
+        fi
+        info "[$i/15] Waiting for process version confirmation (reported: $CUR_TAG, target: $TARGET_TAG)..."
+        sleep 2
+      done
+
+      if [ "$VERIFIED" != "true" ]; then
+        error "Running process version ($CUR_TAG) does not match target ($TARGET_TAG)!"
+        exit 1
+      fi
+
+      info "Upgrade complete and fully verified on this node!"
+      exit 0
   version: v1.37.1+k3s1
 ---
 apiVersion: upgrade.cattle.io/v1
@@ -37,4 +210,177 @@ spec:
   serviceAccountName: system-upgrade
   upgrade:
     image: rancher/k3s-upgrade
+    command:
+    - /bin/sh
+    - -c
+    args:
+    - |
+      set -e
+
+      info() { echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') $*"; }
+      error() { echo "[ERROR] $(date '+%Y-%m-%d %H:%M:%S') $*" >&2; }
+
+      info "Starting robust K3s node upgrade wrapper..."
+
+      # 1. Identify running K3s service and PID
+      SVC=""
+      if chroot /host systemctl is-active --quiet k3s.service; then
+        SVC="k3s.service"
+      elif chroot /host systemctl is-active --quiet k3s-agent.service; then
+        SVC="k3s-agent.service"
+      fi
+
+      if [ -n "$SVC" ]; then
+        K3S_PID=$(chroot /host systemctl show -p MainPID --value "$SVC" 2>/dev/null || true)
+        info "Detected systemd service: $SVC (MainPID: $K3S_PID)"
+      fi
+
+      if [ -z "$K3S_PID" ] || [ "$K3S_PID" = "0" ]; then
+        K3S_PID=$(ps -ef | grep -E "( |/)k3s .*(server|agent)" | grep -E -v "(init|grep|channelserver|supervise-daemon)" | awk '{print $2}' | head -n1)
+        info "Detected K3s PID via process scan: $K3S_PID"
+      fi
+
+      if [ -z "$K3S_PID" ] || [ "$K3S_PID" = "0" ]; then
+        error "No running K3s process found on this host!"
+        exit 1
+      fi
+
+      # 2. Identify binary paths and versions
+      NEW_BIN="/opt/k3s"
+      if [ ! -f "$NEW_BIN" ]; then
+        error "Target binary $NEW_BIN not found in container!"
+        exit 1
+      fi
+
+      K3S_BIN_PATH=$(tr '\0' '\n' < "/host/proc/${K3S_PID}/cmdline" 2>/dev/null | head -n1 || true)
+      if [ -z "$K3S_BIN_PATH" ] || [ ! -e "/host$K3S_BIN_PATH" ]; then
+        K3S_BIN_PATH="/usr/local/bin/k3s"
+      fi
+      HOST_BIN="/host$K3S_BIN_PATH"
+
+      TARGET_TAG=$($NEW_BIN -v 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+' | head -n1)
+      RUNNING_TAG=""
+      if [ -e "/proc/${K3S_PID}/exe" ]; then
+        RUNNING_TAG=$(/proc/${K3S_PID}/exe -v 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+' | head -n1 || true)
+      fi
+
+      info "Target version tag:  $TARGET_TAG"
+      info "Running version tag: $RUNNING_TAG (PID $K3S_PID)"
+
+      # 3. Check if binary replacement is required
+      NEED_COPY=false
+      if [ ! -f "$HOST_BIN" ]; then
+        NEED_COPY=true
+      else
+        SUM_NEW=$(sha256sum "$NEW_BIN" | awk '{print $1}')
+        SUM_HOST=$(sha256sum "$HOST_BIN" | awk '{print $1}')
+        if [ "$SUM_NEW" != "$SUM_HOST" ]; then
+          NEED_COPY=true
+        fi
+      fi
+
+      if [ "$NEED_COPY" = "true" ]; then
+        info "Replacing host binary at $HOST_BIN (SHA256: $SUM_NEW)..."
+        cp "$NEW_BIN" "${HOST_BIN}.tmp"
+        chmod 755 "${HOST_BIN}.tmp"
+        sync
+        mv -f "${HOST_BIN}.tmp" "$HOST_BIN"
+        sync
+        info "Host binary replaced and synced successfully."
+      else
+        info "Host binary at $HOST_BIN matches target binary checksum ($SUM_NEW)."
+      fi
+
+      # 4. Check if service restart is required
+      if [ -n "$RUNNING_TAG" ] && [ "$RUNNING_TAG" = "$TARGET_TAG" ]; then
+        info "Node is already running target version $TARGET_TAG. No restart required."
+        exit 0
+      fi
+
+      info "Running daemon version ($RUNNING_TAG) does not match target ($TARGET_TAG). Restarting service..."
+      OLD_PID="$K3S_PID"
+
+      # 5. Initiate restart
+      if [ -n "$SVC" ]; then
+        info "Initiating systemctl restart for $SVC (non-blocking)..."
+        chroot /host systemctl restart "$SVC" --no-block || kill -SIGTERM "$OLD_PID"
+      else
+        info "Sending SIGTERM to PID $OLD_PID..."
+        kill -SIGTERM "$OLD_PID"
+      fi
+
+      # 6. Wait for OLD_PID to terminate
+      info "Waiting for old PID $OLD_PID to terminate..."
+      TERMINATED=false
+      for i in $(seq 1 45); do
+        if ! kill -0 "$OLD_PID" 2>/dev/null; then
+          TERMINATED=true
+          info "Old PID $OLD_PID has terminated."
+          break
+        fi
+        sleep 1
+      done
+
+      if [ "$TERMINATED" != "true" ]; then
+        info "Old PID $OLD_PID did not exit after 45s. Sending SIGKILL..."
+        kill -SIGKILL "$OLD_PID" 2>/dev/null || true
+        sleep 2
+      fi
+
+      # 7. Wait for service to restart and become active
+      info "Waiting for K3s service to restart and report active..."
+      STARTED=false
+      NEW_PID=""
+
+      for i in $(seq 1 90); do
+        sleep 2
+        if [ -n "$SVC" ]; then
+          STATE=$(chroot /host systemctl is-active "$SVC" 2>/dev/null || true)
+          CUR_PID=$(chroot /host systemctl show -p MainPID --value "$SVC" 2>/dev/null || true)
+          if [ "$STATE" = "active" ] && [ -n "$CUR_PID" ] && [ "$CUR_PID" != "0" ] && [ "$CUR_PID" != "$OLD_PID" ]; then
+            NEW_PID="$CUR_PID"
+            STARTED=true
+            break
+          fi
+        else
+          CUR_PID=$(ps -ef | grep -E "( |/)k3s .*(server|agent)" | grep -E -v "(init|grep|channelserver|supervise-daemon)" | awk '{print $2}' | head -n1)
+          if [ -n "$CUR_PID" ] && [ "$CUR_PID" != "$OLD_PID" ]; then
+            NEW_PID="$CUR_PID"
+            STARTED=true
+            break
+          fi
+        fi
+        info "[$i/90] Waiting for service to report active with new PID (state: ${STATE:-unknown}, PID: ${CUR_PID:-none})..."
+      done
+
+      if [ "$STARTED" != "true" ]; then
+        error "Timed out waiting for K3s service to restart!"
+        exit 1
+      fi
+
+      info "K3s service is active with new PID $NEW_PID."
+
+      # 8. Verify running binary version of the new process
+      VERIFIED=false
+      for i in $(seq 1 15); do
+        CUR_TAG=""
+        if [ -e "/proc/${NEW_PID}/exe" ]; then
+          CUR_TAG=$(/proc/${NEW_PID}/exe -v 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+' | head -n1 || true)
+        fi
+        if [ "$CUR_TAG" = "$TARGET_TAG" ]; then
+          VERIFIED=true
+          info "Verified: running process PID $NEW_PID is successfully running $TARGET_TAG!"
+          break
+        fi
+        info "[$i/15] Waiting for process version confirmation (reported: $CUR_TAG, target: $TARGET_TAG)..."
+        sleep 2
+      done
+
+      if [ "$VERIFIED" != "true" ]; then
+        error "Running process version ($CUR_TAG) does not match target ($TARGET_TAG)!"
+        exit 1
+      fi
+
+      info "Upgrade complete and fully verified on this node!"
+      exit 0
   version: v1.37.1+k3s1

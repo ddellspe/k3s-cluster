@@ -21,6 +21,33 @@ rules:
   - get
   - list
   - delete
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - get
+  - list
+  - delete
+- apiGroups:
+  - upgrade.cattle.io
+  resources:
+  - plans
+  - plans/status
+  verbs:
+  - get
+  - list
+  - patch
+  - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

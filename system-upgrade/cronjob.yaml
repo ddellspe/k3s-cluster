@@ -43,8 +43,22 @@ spec:
               kubectl patch helmchart traefik-crd -n kube-system --type=merge -p '{"spec":{"takeOwnership":true}}' 2>/dev/null || true
               kubectl delete validatingadmissionpolicy,validatingadmissionpolicybinding safe-upgrades.gateway.networking.k8s.io 2>/dev/null || true
 
-              # 3. Check and patch upgrade plans
+              # 3. Detect any outdated nodes and clear stale completion labels if needed
               UPDATED=false
+              OUTDATED_NODES=$(kubectl get nodes -o json | jq -r --arg tag "$LATEST_TAG" '.items[] | select(.status.nodeInfo.kubeletVersion != $tag) | .metadata.name')
+              if [ -n "$OUTDATED_NODES" ]; then
+                echo "Detected outdated node(s): $(echo $OUTDATED_NODES | tr '\n' ' ')"
+                for NODE in $OUTDATED_NODES; do
+                  LABELS=$(kubectl get node "$NODE" -o jsonpath='{.metadata.labels}' 2>/dev/null || echo "")
+                  if echo "$LABELS" | grep -q 'plan.upgrade.cattle.io'; then
+                    echo "Node $NODE has stale plan completion label but is not on $LATEST_TAG. Stripping label to force re-upgrade..."
+                    kubectl label node "$NODE" plan.upgrade.cattle.io/k3s-server- plan.upgrade.cattle.io/k3s-agent- 2>/dev/null || true
+                  fi
+                done
+                UPDATED=true
+              fi
+
+              # 4. Check and patch upgrade plans
               for PLAN in k3s-server k3s-agent; do
                 CURRENT_VERSION=$(kubectl get plan $PLAN -n system-upgrade -o jsonpath='{.spec.version}' 2>/dev/null || echo "")
                 echo "Current $PLAN version: $CURRENT_VERSION"
@@ -67,27 +81,29 @@ spec:
                 fi
               done
 
-              # 4. If an upgrade was triggered, wait and verify cluster health
-              if [ "$UPDATED" = "true" ]; then
-                echo "Waiting up to 15 minutes for all nodes to upgrade..."
+              # 5. If an upgrade was triggered or nodes are outdated, wait and verify cluster convergence
+              if [ "$UPDATED" = "true" ] || [ -n "$OUTDATED_NODES" ]; then
+                echo "Waiting up to 15 minutes for all nodes to upgrade to $LATEST_TAG..."
                 ALL_READY=false
                 for i in $(seq 1 30); do
                   sleep 30
-                  PENDING=$(kubectl get nodes --no-headers | grep -v "$LATEST_TAG" | wc -l || true)
-                  if [ "$PENDING" -eq 0 ]; then
+                  PENDING=$(kubectl get nodes -o json | jq -r --arg tag "$LATEST_TAG" '.items[] | select(.status.nodeInfo.kubeletVersion != $tag) | .metadata.name')
+                  if [ -z "$PENDING" ]; then
                     echo "All nodes successfully upgraded to $LATEST_TAG!"
                     ALL_READY=true
                     break
                   fi
-                  echo "[$i/30] $PENDING node(s) still upgrading..."
+                  PENDING_COUNT=$(echo "$PENDING" | wc -w)
+                  echo "[$i/30] $PENDING_COUNT node(s) still upgrading: $(echo $PENDING | tr '\n' ' ')"
                 done
 
                 if [ "$ALL_READY" != "true" ]; then
-                  echo "WARNING: Some nodes did not finish upgrading within 15 minutes:"
+                  echo "ERROR: Nodes failed to converge to $LATEST_TAG within 15 minutes:"
                   kubectl get nodes -o wide
+                  exit 1
                 fi
 
-                # 5. Post-upgrade check for failing pods in kube-system
+                # 6. Post-upgrade check for failing pods in kube-system
                 echo "Checking for unhealthy pods in kube-system..."
                 UNHEALTHY=$(kubectl get pods -n kube-system --field-selector status.phase!=Running,status.phase!=Succeeded --no-headers | wc -l || true)
                 if [ "$UNHEALTHY" -gt 0 ]; then
