@@ -49,6 +49,14 @@ spec:
                 CURRENT_VERSION=$(kubectl get plan $PLAN -n system-upgrade -o jsonpath='{.spec.version}' 2>/dev/null || echo "")
                 echo "Current $PLAN version: $CURRENT_VERSION"
 
+                # If plan failed previously, clear the failed condition so SUC can retry
+                FAILED=$(kubectl get plan $PLAN -n system-upgrade -o jsonpath='{.status.conditions[?(@.reason=="JobFailed")].reason}' 2>/dev/null || echo "")
+                if [ -n "$FAILED" ]; then
+                  echo "Clearing previous failed status condition on $PLAN plan..."
+                  kubectl patch plan $PLAN -n system-upgrade --subresource=status --type=merge -p '{"status":{"applying":null,"conditions":[]}}' || true
+                  UPDATED=true
+                fi
+
                 if [ "$LATEST_TAG" != "$CURRENT_VERSION" ]; then
                   echo "Patching $PLAN Plan to version $LATEST_TAG..."
                   kubectl patch plan $PLAN -n system-upgrade --type=merge -p "{\"spec\":{\"version\":\"$LATEST_TAG\"}}"
