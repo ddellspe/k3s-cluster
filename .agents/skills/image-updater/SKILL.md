@@ -37,18 +37,29 @@ Open-WebUI runs custom startup patches defined in [llm/open-webui/configmap-patc
 - When upgrading Open-WebUI, verify that target files (such as `open_webui/routers/images.py` and `open_webui/routers/audio/__init__.py`) still match expected patterns.
 - Ensure the patch script gracefully handles path transitions (e.g., `audio.py` turning into package `audio/__init__.py`).
 
-### 3. Actions Runner Controller (ARC) & CRDs
-The GitHub Actions Runner ScaleSet Controller ([dev-infra/actions-runner/controller/deployment.yaml](file:///mnt/c/Users/david/workspace/k3s-cluster/dev-infra/actions-runner/controller/deployment.yaml)) manages ephemeral runners.
-- When updating `ghcr.io/actions/gha-runner-scale-set-controller`, verify if upstream CRDs changed:
-  ```bash
-  curl -s "https://api.github.com/repos/actions/actions-runner-controller/compare/gha-runner-scale-set-<OLD>...gha-runner-scale-set-<NEW>" | jq '.files[].filename'
-  ```
-- If CRDs changed, apply the new CRD definitions from upstream:
+### 3. Actions Runner Controller (ARC), Runner ScaleSets & CRDs
+The GitHub Actions Runner ScaleSet Controller ([dev-infra/actions-runner/controller/deployment.yaml](file:///mnt/c/Users/david/workspace/k3s-cluster/dev-infra/actions-runner/controller/deployment.yaml)) manages ephemeral runner sets. Upgrading it involves a three-way synchronization:
+
+- **CRD Schema Updates (Server-Side Apply Required)**:
+  Upstream CRD definitions exceed the 256KB annotation limit for client-side `kubectl apply`. Always apply them using server-side apply:
   ```bash
   for crd in autoscalinglisteners autoscalingrunnersets ephemeralrunners ephemeralrunnersets; do
-    kubectl apply -f "https://raw.githubusercontent.com/actions/actions-runner-controller/gha-runner-scale-set-<NEW>/charts/gha-runner-scale-set-controller/crds/actions.github.com_${crd}.yaml"
+    kubectl apply --server-side=true --force-conflicts -f "https://raw.githubusercontent.com/actions/actions-runner-controller/gha-runner-scale-set-<NEW>/charts/gha-runner-scale-set-controller/crds/actions.github.com_${crd}.yaml"
   done
   ```
+- **CLI Flag Migration in Controller Deployment**:
+  Check release notes for deprecated or split CLI flags. For example, in ARC 0.15.0:
+  - `--runner-max-concurrent-reconciles` was removed in favor of granular flags: `--autoscaling-runner-set-max-concurrent-reconciles=2`.
+  - `--update-strategy=immediate` was removed due to native in-place updates.
+  - Leaving deprecated flags in `args` will cause the manager pod to fail with `flag provided but not defined`.
+- **Runner ScaleSet Version Label Lock (`app.kubernetes.io/version`)**:
+  ARC enforces strict version parity between the controller build and runner manifests.
+  In [dev-infra/actions-runner/runners/runner-amd64.yaml](file:///mnt/c/Users/david/workspace/k3s-cluster/dev-infra/actions-runner/runners/runner-amd64.yaml) and [runner-arm64.yaml](file:///mnt/c/Users/david/workspace/k3s-cluster/dev-infra/actions-runner/runners/runner-arm64.yaml), all occurrences of:
+  ```yaml
+  app.kubernetes.io/version: "<VERSION>"
+  ```
+  **MUST** be updated to match the new controller version. If mismatched, the controller will delete the `AutoscalingRunnerSet` with the error:
+  `"Autoscaling runner set version doesn't match the build version. Deleting the resource."`
 
 ### 4. Kubernetes Helper Utilities Alignment
 Manifests executing direct `kubectl` operations (such as [infra/pod-remediator/deployment.yaml](file:///mnt/c/Users/david/workspace/k3s-cluster/infra/pod-remediator/deployment.yaml) and [system-upgrade/cronjob.yaml](file:///mnt/c/Users/david/workspace/k3s-cluster/system-upgrade/cronjob.yaml)) use `alpine/k8s:<version>`.
@@ -82,6 +93,7 @@ Manifests executing direct `kubectl` operations (such as [infra/pod-remediator/d
    Update image tags in the relevant YAML manifests (`deployment.yaml`, `daemonset.yaml`, `cronjob.yaml`).
 
 4. **Deploy & Rollout Verification**:
+   Ensure sub-kustomizations explicitly specify `namespace:` (e.g. `namespace: kube-system` in `infra/pod-remediator/kustomization.yaml`) so resources don't accidentally deploy to the context's default namespace when applying subdirectories independently.
    Apply manifests via kustomize:
    ```bash
    kubectl apply -k <directory>/
