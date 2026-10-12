@@ -20,7 +20,7 @@ spec:
       serviceAccountName: pod-remediator
       containers:
       - name: remediator
-        image: alpine/k8s:1.36.4
+        image: alpine/k8s:1.37.1
         imagePullPolicy: IfNotPresent
         command:
         - /bin/sh

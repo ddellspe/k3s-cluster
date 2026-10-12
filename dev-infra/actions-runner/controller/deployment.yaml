@@ -32,14 +32,13 @@ spec:
         kubernetes.io/hostname: distiller
       containers:
       - name: manager
-        image: "ghcr.io/actions/gha-runner-scale-set-controller:0.14.2"
+        image: "ghcr.io/actions/gha-runner-scale-set-controller:0.15.0"
         imagePullPolicy: IfNotPresent
         args:
         - "--auto-scaling-runner-set-only"
         - "--log-level=debug"
         - "--log-format=text"
-        - "--runner-max-concurrent-reconciles=2"
-        - "--update-strategy=immediate"
+        - "--autoscaling-runner-set-max-concurrent-reconciles=2"
         - "--listener-metrics-addr=0"
         - "--listener-metrics-endpoint="
         - "--metrics-addr=0"
@@ -47,7 +46,7 @@ spec:
         - "/manager"
         env:
         - name: CONTROLLER_MANAGER_CONTAINER_IMAGE
-          value: "ghcr.io/actions/gha-runner-scale-set-controller:0.14.2"
+          value: "ghcr.io/actions/gha-runner-scale-set-controller:0.15.0"
         - name: CONTROLLER_MANAGER_POD_NAMESPACE
           valueFrom:
             fieldRef:

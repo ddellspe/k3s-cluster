@@ -104,7 +104,7 @@ data:
     print("Patch application completed successfully.")
 
     # 4. Patch audio.py get_available_voices to fetch voices from Kokoro when routed through LiteLLM
-    AUDIO_TARGET = "/app/backend/open_webui/routers/audio.py"
+    AUDIO_TARGET = "/app/backend/open_webui/routers/audio/__init__.py" if os.path.exists("/app/backend/open_webui/routers/audio/__init__.py") else "/app/backend/open_webui/routers/audio.py"
     if os.path.exists(AUDIO_TARGET):
         try:
             with open(AUDIO_TARGET, "r") as f:

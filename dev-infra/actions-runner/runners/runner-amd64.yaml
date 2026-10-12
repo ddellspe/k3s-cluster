@@ -6,7 +6,7 @@ metadata:
   labels:
     app.kubernetes.io/name: arc-runner-amd64
     app.kubernetes.io/part-of: gha-rs
-    app.kubernetes.io/version: "0.14.2"
+    app.kubernetes.io/version: "0.15.0"
     actions.github.com/scale-set-name: arc-runner-amd64
     actions.github.com/scale-set-namespace: dev-infra
 ---
@@ -18,7 +18,7 @@ metadata:
   labels:
     app.kubernetes.io/name: arc-runner-amd64
     app.kubernetes.io/part-of: gha-rs
-    app.kubernetes.io/version: "0.14.2"
+    app.kubernetes.io/version: "0.15.0"
     actions.github.com/scale-set-name: arc-runner-amd64
     actions.github.com/scale-set-namespace: dev-infra
     app.kubernetes.io/component: manager-role
@@ -88,7 +88,7 @@ metadata:
   labels:
     app.kubernetes.io/name: arc-runner-amd64
     app.kubernetes.io/part-of: gha-rs
-    app.kubernetes.io/version: "0.14.2"
+    app.kubernetes.io/version: "0.15.0"
     actions.github.com/scale-set-name: arc-runner-amd64
     actions.github.com/scale-set-namespace: dev-infra
     app.kubernetes.io/component: manager-role-binding
@@ -110,7 +110,7 @@ metadata:
     app.kubernetes.io/component: "autoscaling-runner-set"
     app.kubernetes.io/name: arc-runner-amd64
     app.kubernetes.io/part-of: gha-rs
-    app.kubernetes.io/version: "0.14.2"
+    app.kubernetes.io/version: "0.15.0"
     actions.github.com/scale-set-name: arc-runner-amd64
     actions.github.com/scale-set-namespace: dev-infra
 spec:
