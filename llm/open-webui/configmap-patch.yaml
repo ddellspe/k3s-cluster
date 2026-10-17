@@ -154,4 +154,24 @@ data:
     except Exception as e:
         print(f"Failed to sync audio configuration into SQLite: {e}")
 
+    # 6. Patch env.py to prevent appending '(Open WebUI)' to custom WEBUI_NAME
+    ENV_TARGET = "/app/backend/open_webui/env.py"
+    if os.path.exists(ENV_TARGET):
+        try:
+            with open(ENV_TARGET, "r") as f:
+                env_content = f.read()
+
+            OLD_BRANDING = "if WEBUI_NAME != 'Open WebUI':\n    WEBUI_NAME += ' (Open WebUI)'"
+            NEW_BRANDING = "# Suffix disabled\n# if WEBUI_NAME != 'Open WebUI':\n#     WEBUI_NAME += ' (Open WebUI)'"
+            if OLD_BRANDING in env_content:
+                env_content = env_content.replace(OLD_BRANDING, NEW_BRANDING, 1)
+                with open(ENV_TARGET, "w") as f:
+                    f.write(env_content)
+                print("Successfully patched WEBUI_NAME branding suffix in env.py.")
+            else:
+                print("env.py branding check already patched or pattern changed.")
+        except Exception as e:
+            print(f"Failed to patch env.py branding: {e}")
+
+
 
