@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kcscout-ingress-external
+  namespace: kcscout
+  labels:
+    app: kcscout
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: leresolver
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - kcscout.ddellspe.net
+  rules:
+    - host: kcscout.ddellspe.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kcscout
+                port:
+                  number: 8080
+

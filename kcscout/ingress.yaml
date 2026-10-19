@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kcscout
+  namespace: kcscout
+  labels:
+    app: kcscout
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - kcscout.ddellspe.dev
+      secretName: ddellspe-tls
+  rules:
+    - host: kcscout.ddellspe.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kcscout
+                port:
+                  number: 8080
+
