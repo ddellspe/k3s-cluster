@@ -129,6 +129,11 @@ spec:
       nodeSelector:
         kubernetes.io/arch: amd64
         kubernetes.io/hostname: distiller
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 1.1.1.1
+          - 8.8.8.8
       restartPolicy: Never
       serviceAccountName: arc-runner-amd64-gha-rs-no-permission
       initContainers:
@@ -145,6 +150,8 @@ spec:
         - dockerd
         - --host=unix:///var/run/docker.sock
         - --group=$(DOCKER_GROUP_GID)
+        - --dns=1.1.1.1
+        - --dns=8.8.8.8
         env:
         - name: DOCKER_GROUP_GID
           value: "123"
