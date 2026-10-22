@@ -30,7 +30,7 @@ spec:
         - --web.enable-lifecycle
         - --web.enable-admin-api
         - --web.cors.origin=.*
-        image: prom/prometheus:v3.15.0
+        image: prom/prometheus:v3.15.1
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 10

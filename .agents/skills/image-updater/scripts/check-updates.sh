@@ -28,7 +28,12 @@ fetch_openwebui_playwright_req() {
 }
 
 fetch_dockerhub_alpine_k8s() {
-  curl -s "https://hub.docker.com/v2/repositories/alpine/k8s/tags?page_size=25" | \
+  curl -4 -s --max-time 10 "https://hub.docker.com/v2/repositories/alpine/k8s/tags?page_size=25" | \
+    jq -r '.results[].name' 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1
+}
+
+fetch_dockerhub_traefik() {
+  curl -4 -s --max-time 10 "https://hub.docker.com/v2/repositories/rancher/mirrored-library-traefik/tags?page_size=25" | \
     jq -r '.results[].name' 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1
 }
 
@@ -74,6 +79,10 @@ LATEST_SUC=$(fetch_github_latest "rancher/system-upgrade-controller")
 CUR_ALPINE_K8S=$(grep -oE 'image: alpine/k8s:.*' infra/pod-remediator/deployment.yaml | awk -F: '{print $3}')
 LATEST_ALPINE_K8S=$(fetch_dockerhub_alpine_k8s)
 
+# 11. Traefik (Rancher Mirrored)
+CUR_TRAEFIK=$(grep -oE 'tag: ".*"' kube-system/traefik/helmchartconfig.yaml | tr -d '"' | awk '{print $2}')
+LATEST_TRAEFIK=$(fetch_dockerhub_traefik)
+
 print_row() {
   local item="$1"
   local cur="$2"
@@ -99,3 +108,4 @@ print_row "Node Exporter" "$CUR_NODE_EXP" "$LATEST_NODE_EXP" "Up to date"
 print_row "Skyhook Radar" "$CUR_RADAR" "$LATEST_RADAR" "Minor update"
 print_row "System Upgrade Controller" "$CUR_SUC" "$LATEST_SUC" "Patch update"
 print_row "Alpine k8s helper" "$CUR_ALPINE_K8S" "$LATEST_ALPINE_K8S" "Aligns with cluster k8s version"
+print_row "Traefik (HelmChartConfig)" "$CUR_TRAEFIK" "$LATEST_TRAEFIK" "rancher/mirrored-library-traefik"
