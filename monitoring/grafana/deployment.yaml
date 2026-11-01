@@ -30,7 +30,7 @@ spec:
           value: "%(protocol)s://%(domain)s/"
         - name: GF_SERVER_COOKIE_SECURE
           value: "true"
-        image: grafana/grafana:13.2.4
+        image: grafana/grafana:13.3.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 6
