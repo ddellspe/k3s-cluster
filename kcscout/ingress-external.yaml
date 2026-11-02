@@ -14,8 +14,20 @@ spec:
   tls:
     - hosts:
         - kcscout.ddellspe.net
+    - hosts:
+        - kcscout.live
   rules:
     - host: kcscout.ddellspe.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kcscout
+                port:
+                  number: 8080
+    - host: kcscout.live
       http:
         paths:
           - path: /

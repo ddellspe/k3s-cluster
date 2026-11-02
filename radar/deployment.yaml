@@ -25,11 +25,15 @@ spec:
         app: radar
     spec:
       containers:
-      - env:
+      - args:
+        - --allowed-hosts=radar.ddellspe.dev
+        env:
         - name: HOME
           value: /home/radar
         - name: PROMETHEUS_URL
           value: http://prometheus-service.monitoring.svc.cluster.local:9090
+        - name: RADAR_ALLOWED_HOSTS
+          value: "radar.ddellspe.dev"
         image: ghcr.io/skyhook-io/radar:1.19.0
         imagePullPolicy: Always
         livenessProbe:
