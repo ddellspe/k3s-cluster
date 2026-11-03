@@ -56,6 +56,7 @@ k3s-cluster/
 │       ├── storage-hot.yaml               # HOT tier (NVMe on well, low-latency databases & TSDBs)
 │       ├── storage-warm.yaml              # WARM tier (NFS on Margarita, 220TB high-capacity RWX)
 │       ├── storage-cold.yaml              # COLD tier (local-path on Pis, low-power & read-heavy)
+│       ├── watchdog.yaml                  # Warm storage health watchdog (auto-remediation for Margarita reboots/ESTALE)
 │       └── kustomization.yaml
 ├── kube-system/                           # Cluster-wide system configurations
 │   ├── coredns/                           # CoreDNS custom rules (wildcard search-domain interceptor)

@@ -1,0 +1,190 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: warm-storage-watchdog
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: warm-storage-watchdog
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "persistentvolumeclaims", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: warm-storage-watchdog
+subjects:
+  - kind: ServiceAccount
+    name: warm-storage-watchdog
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: warm-storage-watchdog
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: warm-storage-watchdog-script
+  namespace: kube-system
+data:
+  watchdog.sh: |
+    #!/bin/sh
+    set -u
+
+    NFS_SERVER="192.168.2.4"
+    METRICS_URL="http://${NFS_SERVER}:9100/metrics"
+    CHECK_INTERVAL=30
+
+    echo "[$(date -u +%FT%TZ)] [warm-storage-watchdog] Starting warm storage watchdog..."
+    echo "[$(date -u +%FT%TZ)] [warm-storage-watchdog] Monitoring NFS host: ${NFS_SERVER}"
+
+    LAST_BOOT_TIME=""
+    BOOT_INIT=$(curl -s --connect-timeout 3 --max-time 5 "${METRICS_URL}" 2>/dev/null | grep '^node_boot_time_seconds ' | awk '{print $2}')
+    if [ -n "$BOOT_INIT" ]; then
+      LAST_BOOT_TIME="$BOOT_INIT"
+      echo "[$(date -u +%FT%TZ)] [warm-storage-watchdog] Initial NFS server boot timestamp: ${LAST_BOOT_TIME}"
+    fi
+
+    while true; do
+      # -------------------------------------------------------------
+      # 1. Proactive Check: Detect NFS Server (margarita) reboot
+      # -------------------------------------------------------------
+      CURRENT_BOOT=$(curl -s --connect-timeout 3 --max-time 5 "${METRICS_URL}" 2>/dev/null | grep '^node_boot_time_seconds ' | awk '{print $2}')
+      if [ -n "$CURRENT_BOOT" ]; then
+        if [ -n "$LAST_BOOT_TIME" ] && [ "$CURRENT_BOOT" != "$LAST_BOOT_TIME" ]; then
+          echo "[$(date -u +%FT%TZ)] [warm-storage-watchdog] [ALERT] NFS server reboot detected! (old: ${LAST_BOOT_TIME}, new: ${CURRENT_BOOT})"
+          echo "[$(date -u +%FT%TZ)] [warm-storage-watchdog] Waiting for NFS port 2049 to respond..."
+
+          for i in $(seq 1 30); do
+            if nc -z -w 2 "${NFS_SERVER}" 2049 2>/dev/null; then
+              echo "[$(date -u +%FT%TZ)] [warm-storage-watchdog] NFS port 2049 is responsive."
+              break
+            fi
+            sleep 2
+          done
+
+          # Brief pause for NFS grace period and MergerFS mount stabilization
+          sleep 5
+
+          echo "[$(date -u +%FT%TZ)] [warm-storage-watchdog] Recycling all pods using storage-warm PVCs to refresh NFS file handles..."
+          WARM_PVCS=$(kubectl get pvc -A -o json 2>/dev/null | jq -r '.items[] | select(.spec.storageClassName=="storage-warm") | "\(.metadata.namespace):\(.metadata.name)"')
+          for ENTRY in $WARM_PVCS; do
+            [ -z "$ENTRY" ] && continue
+            NS=$(echo "$ENTRY" | cut -d: -f1)
+            PVC=$(echo "$ENTRY" | cut -d: -f2)
+            PODS=$(kubectl get pods -n "$NS" -o json 2>/dev/null | jq -r --arg pvc "$PVC" '.items[] | select(.spec.volumes[]?.persistentVolumeClaim.claimName == $pvc) | .metadata.name')
+            for P in $PODS; do
+              [ -z "$P" ] && continue
+              echo "[$(date -u +%FT%TZ)] [warm-storage-watchdog] Deleting pod $NS/$P to unmount stale NFS volume..."
+              kubectl delete pod "$P" -n "$NS" --timeout=30s 2>/dev/null || true
+            done
+          done
+          echo "[$(date -u +%FT%TZ)] [warm-storage-watchdog] NFS reboot recovery completed."
+        fi
+        LAST_BOOT_TIME="$CURRENT_BOOT"
+      fi
+
+      # -------------------------------------------------------------
+      # 2. Reactive Check: Catch stale file handles & CreateContainerError
+      # -------------------------------------------------------------
+      FAILING_PODS=$(kubectl get pods -A -o json 2>/dev/null | jq -r '
+        .items[] |
+        select(
+          (.status.containerStatuses[]?.state.waiting.reason == "CreateContainerError") or
+          (.status.containerStatuses[]?.state.waiting.reason == "CrashLoopBackOff" and .status.containerStatuses[]?.lastState.terminated.exitCode == 2)
+        ) |
+        "\(.metadata.namespace):\(.metadata.name)"
+      ')
+
+      for ENTRY in $FAILING_PODS; do
+        [ -z "$ENTRY" ] && continue
+        NS=$(echo "$ENTRY" | cut -d: -f1)
+        POD=$(echo "$ENTRY" | cut -d: -f2)
+
+        IS_WARM=$(kubectl get pod "$POD" -n "$NS" -o json 2>/dev/null | jq -r '
+          .spec.volumes[]?.persistentVolumeClaim.claimName // empty
+        ')
+
+        HAS_STALE_EVENT=$(kubectl get events -n "$NS" --field-selector involvedObject.name="$POD" -o json 2>/dev/null | jq -r '
+          .items[] | select(.message | test("stale file handle"; "i")) | .message
+        ')
+
+        if [ -n "$HAS_STALE_EVENT" ] || [ -n "$IS_WARM" ]; then
+          echo "[$(date -u +%FT%TZ)] [warm-storage-watchdog] Detected pod $NS/$POD in error state with NFS volume / stale file handle. Deleting to trigger fresh mount..."
+          kubectl delete pod "$POD" -n "$NS" --force --grace-period=0 2>/dev/null || kubectl delete pod "$POD" -n "$NS" 2>/dev/null || true
+        fi
+      done
+
+      # Also check cluster events for any "stale file handle" mentions
+      STALE_EVENT_PODS=$(kubectl get events -A --field-selector reason=Failed -o json 2>/dev/null | jq -r '
+        .items[] |
+        select(.message | test("stale file handle"; "i")) |
+        "\(.involvedObject.namespace):\(.involvedObject.name)"
+      ' | sort -u)
+
+      for ENTRY in $STALE_EVENT_PODS; do
+        [ -z "$ENTRY" ] && continue
+        NS=$(echo "$ENTRY" | cut -d: -f1)
+        POD=$(echo "$ENTRY" | cut -d: -f2)
+        if kubectl get pod "$POD" -n "$NS" >/dev/null 2>&1; then
+          echo "[$(date -u +%FT%TZ)] [warm-storage-watchdog] Pod $NS/$POD has stale file handle event. Deleting..."
+          kubectl delete pod "$POD" -n "$NS" --force --grace-period=0 2>/dev/null || kubectl delete pod "$POD" -n "$NS" 2>/dev/null || true
+        fi
+      done
+
+      sleep "$CHECK_INTERVAL"
+    done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: warm-storage-watchdog
+  namespace: kube-system
+  labels:
+    app: warm-storage-watchdog
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: warm-storage-watchdog
+  template:
+    metadata:
+      labels:
+        app: warm-storage-watchdog
+    spec:
+      serviceAccountName: warm-storage-watchdog
+      containers:
+        - name: watchdog
+          image: alpine/k8s:1.37.2
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - /scripts/watchdog.sh
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: script-volume
+              mountPath: /scripts
+      volumes:
+        - name: script-volume
+          configMap:
+            name: warm-storage-watchdog-script
+            defaultMode: 0755

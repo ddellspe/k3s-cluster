@@ -33,18 +33,25 @@ spec:
         - name: config-volume
           mountPath: /etc/zot/config.json
           subPath: config.json
-        livenessProbe:
+        startupProbe:
           httpGet:
             path: /livez
             port: 5000
           initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: /livez
+            port: 5000
           periodSeconds: 10
+          failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /readyz
+            path: /v2/_catalog
             port: 5000
-          initialDelaySeconds: 5
           periodSeconds: 10
+          failureThreshold: 3
         resources:
           requests:
             cpu: 100m

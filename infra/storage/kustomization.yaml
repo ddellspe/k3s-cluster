@@ -7,3 +7,4 @@ resources:
   - storage-warm.yaml
   - storage-hot.yaml
   - storage-cold.yaml
+  - watchdog.yaml
