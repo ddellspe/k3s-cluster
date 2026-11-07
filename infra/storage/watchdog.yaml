@@ -127,7 +127,7 @@ data:
       done
 
       # Also check cluster events for any "stale file handle" mentions
-      STALE_EVENT_PODS=$(kubectl get events -A --field-selector reason=Failed -o json 2>/dev/null | jq -r '
+      STALE_EVENT_PODS=$(kubectl get events -A --field-selector type=Warning -o json 2>/dev/null | jq -r '
         .items[] |
         select(.message | test("stale file handle"; "i")) |
         "\(.involvedObject.namespace):\(.involvedObject.name)"
