@@ -95,6 +95,11 @@ print_row() {
   fi
 }
 
+RELOADER_NOTE="Patch update"
+if command -v docker >/dev/null 2>&1 && ! docker manifest inspect "quay.io/prometheus-operator/prometheus-config-reloader:${LATEST_RELOADER}" 2>/dev/null | grep -q '"architecture": "arm64"'; then
+  RELOADER_NOTE="Missing arm64 upstream (held)"
+fi
+
 echo "| Component                        | Current Version  | Latest Version   | Status     | Notes                               |"
 echo "|----------------------------------|------------------|------------------|------------|-------------------------------------|"
 print_row "Open-WebUI" "$CUR_OWUI" "$LATEST_OWUI" "Requires patch_images.py check"
@@ -103,7 +108,7 @@ print_row "ARC ScaleSet Controller" "$CUR_ARC" "$LATEST_ARC" "Requires CRD updat
 print_row "Zot OCI Registry" "$CUR_ZOT" "$LATEST_ZOT" "Patch update"
 print_row "Grafana" "$CUR_GRAFANA" "$LATEST_GRAFANA" "Patch update"
 print_row "Prometheus" "$CUR_PROM" "$LATEST_PROM" "Minor update"
-print_row "Prometheus Config Reloader" "$CUR_RELOADER" "$LATEST_RELOADER" "Patch update"
+print_row "Prometheus Config Reloader" "$CUR_RELOADER" "$LATEST_RELOADER" "$RELOADER_NOTE"
 print_row "Node Exporter" "$CUR_NODE_EXP" "$LATEST_NODE_EXP" "Up to date"
 print_row "Skyhook Radar" "$CUR_RADAR" "$LATEST_RADAR" "Minor update"
 print_row "System Upgrade Controller" "$CUR_SUC" "$LATEST_SUC" "Patch update"

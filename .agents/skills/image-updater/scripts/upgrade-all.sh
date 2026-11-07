@@ -148,6 +148,11 @@ fetch_dockerhub_alpine_k8s() {
     jq -r '.results[].name' 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1
 }
 
+fetch_dockerhub_traefik() {
+  curl -4 -s --max-time 10 "https://hub.docker.com/v2/repositories/rancher/mirrored-library-traefik/tags?page_size=25" | \
+    jq -r '.results[].name' 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1
+}
+
 # ------------------------------------------------------------------------------
 # Audit & Comparison
 # ------------------------------------------------------------------------------
@@ -198,6 +203,10 @@ LATEST_SUC=$(fetch_github_latest "rancher/system-upgrade-controller")
 CUR_ALPINE_K8S=$(grep -oE 'image: alpine/k8s:.*' infra/pod-remediator/deployment.yaml | awk -F: '{print $3}')
 LATEST_ALPINE_K8S=$(fetch_dockerhub_alpine_k8s)
 
+# 11. Traefik (HelmChartConfig)
+CUR_TRAEFIK=$(grep -oE 'tag: ".*"' kube-system/traefik/helmchartconfig.yaml | tr -d '"' | awk '{print $2}')
+LATEST_TRAEFIK=$(fetch_dockerhub_traefik)
+
 # Print Status Table
 print_row() {
   local item="$1"
@@ -213,6 +222,11 @@ print_row() {
   fi
 }
 
+RELOADER_NOTE="Prometheus sidecar"
+if command -v docker >/dev/null 2>&1 && ! docker manifest inspect "quay.io/prometheus-operator/prometheus-config-reloader:${LATEST_RELOADER}" 2>/dev/null | grep -q '"architecture": "arm64"'; then
+  RELOADER_NOTE="Upstream missing arm64; held"
+fi
+
 echo "| Component                      | Current Version  | Latest Version   | Status     | Notes                            |"
 echo "|--------------------------------|------------------|------------------|------------|----------------------------------|"
 print_row "Open-WebUI" "$CUR_OWUI" "$LATEST_OWUI" "Coupled with Playwright"
@@ -221,11 +235,12 @@ print_row "ARC ScaleSet Controller" "$CUR_ARC" "$LATEST_ARC" "Requires CRD serve
 print_row "Zot OCI Registry" "$CUR_ZOT" "$LATEST_ZOT" "Registry deployment"
 print_row "Grafana" "$CUR_GRAFANA" "$LATEST_GRAFANA" "Monitoring dashboard"
 print_row "Prometheus" "$CUR_PROM" "$LATEST_PROM" "Prometheus server"
-print_row "Prometheus Config Reloader" "$CUR_RELOADER" "$LATEST_RELOADER" "Prometheus sidecar"
+print_row "Prometheus Config Reloader" "$CUR_RELOADER" "$LATEST_RELOADER" "$RELOADER_NOTE"
 print_row "Node Exporter" "$CUR_NODE_EXP" "$LATEST_NODE_EXP" "Node metrics daemonset"
 print_row "Skyhook Radar" "$CUR_RADAR" "$LATEST_RADAR" "Cluster topology & issues"
 print_row "System Upgrade Controller" "$CUR_SUC" "$LATEST_SUC" "Node OS/k3s upgrades"
 print_row "Alpine k8s helper" "$CUR_ALPINE_K8S" "$LATEST_ALPINE_K8S" "Remediator & upgrade cronjob"
+print_row "Traefik (HelmChartConfig)" "$CUR_TRAEFIK" "$LATEST_TRAEFIK" "rancher/mirrored-library-traefik"
 echo ""
 
 # Exit early if check only
@@ -235,7 +250,7 @@ fi
 
 # Track updates to execute
 UPDATED_COMPONENTS=()
-MODIFIED_FILES=()
+MODIFIED_FILES=(".agents/skills/image-updater/scripts/check-updates.sh" ".agents/skills/image-updater/scripts/upgrade-all.sh")
 
 # ------------------------------------------------------------------------------
 # 1. Skyhook Radar Update
@@ -271,14 +286,19 @@ fi
 # 3. Prometheus Config Reloader
 # ------------------------------------------------------------------------------
 if [ -n "$LATEST_RELOADER" ] && [ "$CUR_RELOADER" != "$LATEST_RELOADER" ]; then
-  log_step "Updating Prometheus Config Reloader: $CUR_RELOADER -> $LATEST_RELOADER"
-  if [ "$DRY_RUN" = false ]; then
-    sed -i "s|image: quay.io/prometheus-operator/prometheus-config-reloader:.*|image: quay.io/prometheus-operator/prometheus-config-reloader:${LATEST_RELOADER}|" monitoring/prometheus/deployment.yaml
-    kubectl apply -k monitoring/prometheus/
-    kubectl rollout status deployment/prometheus -n monitoring --timeout=180s
-    MODIFIED_FILES+=("monitoring/prometheus/deployment.yaml")
+  RELOADER_IMG="quay.io/prometheus-operator/prometheus-config-reloader:${LATEST_RELOADER}"
+  if command -v docker >/dev/null 2>&1 && ! docker manifest inspect "$RELOADER_IMG" 2>/dev/null | grep -q '"architecture": "arm64"'; then
+    log_warn "Skipping Prometheus Config Reloader $LATEST_RELOADER: missing linux/arm64 architecture support in upstream manifest"
+  else
+    log_step "Updating Prometheus Config Reloader: $CUR_RELOADER -> $LATEST_RELOADER"
+    if [ "$DRY_RUN" = false ]; then
+      sed -i "s|image: quay.io/prometheus-operator/prometheus-config-reloader:.*|image: quay.io/prometheus-operator/prometheus-config-reloader:${LATEST_RELOADER}|" monitoring/prometheus/deployment.yaml
+      kubectl apply -k monitoring/prometheus/
+      kubectl rollout status deployment/prometheus -n monitoring --timeout=180s
+      MODIFIED_FILES+=("monitoring/prometheus/deployment.yaml")
+    fi
+    UPDATED_COMPONENTS+=("prometheus-config-reloader: $CUR_RELOADER -> $LATEST_RELOADER")
   fi
-  UPDATED_COMPONENTS+=("prometheus-config-reloader: $CUR_RELOADER -> $LATEST_RELOADER")
 fi
 
 # ------------------------------------------------------------------------------
@@ -350,22 +370,24 @@ fi
 
 if [ "$OWUI_NEEDS_UPDATE" = true ] || [ "$PLAYWRIGHT_NEEDS_UPDATE" = true ]; then
   log_step "Updating Open-WebUI ($CUR_OWUI -> $LATEST_OWUI) & Playwright ($CUR_PLAYWRIGHT -> $TARGET_PLAYWRIGHT)"
-  if [ "$DRY_RUN" = false ]; then
-    if [ "$PLAYWRIGHT_NEEDS_UPDATE" = true ]; then
+  if [ "$PLAYWRIGHT_NEEDS_UPDATE" = true ]; then
+    if [ "$DRY_RUN" = false ]; then
       sed -i "s|image: mcr.microsoft.com/playwright/python:.*|image: mcr.microsoft.com/playwright/python:${TARGET_PLAYWRIGHT}|" llm/playwright/deployment.yaml
       kubectl apply -k llm/playwright/
       kubectl rollout status deployment/playwright -n llm --timeout=180s
       MODIFIED_FILES+=("llm/playwright/deployment.yaml")
-      UPDATED_COMPONENTS+=("playwright: $CUR_PLAYWRIGHT -> $TARGET_PLAYWRIGHT")
     fi
+    UPDATED_COMPONENTS+=("playwright: $CUR_PLAYWRIGHT -> $TARGET_PLAYWRIGHT")
+  fi
 
-    if [ "$OWUI_NEEDS_UPDATE" = true ]; then
+  if [ "$OWUI_NEEDS_UPDATE" = true ]; then
+    if [ "$DRY_RUN" = false ]; then
       sed -i "s|image: ghcr.io/open-webui/open-webui:.*|image: ghcr.io/open-webui/open-webui:${LATEST_OWUI}|" llm/open-webui/deployment.yaml
       kubectl apply -k llm/open-webui/
       kubectl rollout status deployment/open-webui -n llm --timeout=300s
       MODIFIED_FILES+=("llm/open-webui/deployment.yaml")
-      UPDATED_COMPONENTS+=("open-webui: $CUR_OWUI -> $LATEST_OWUI")
     fi
+    UPDATED_COMPONENTS+=("open-webui: $CUR_OWUI -> $LATEST_OWUI")
   fi
 fi
 
@@ -398,6 +420,21 @@ if [ -n "$LATEST_SUC" ] && [ "$CUR_SUC" != "$LATEST_SUC" ]; then
 fi
 
 # ------------------------------------------------------------------------------
+# 10. Traefik (HelmChartConfig)
+# ------------------------------------------------------------------------------
+if [ -n "$LATEST_TRAEFIK" ] && [ "$CUR_TRAEFIK" != "$LATEST_TRAEFIK" ]; then
+  log_step "Updating Traefik: $CUR_TRAEFIK -> $LATEST_TRAEFIK"
+  if [ "$DRY_RUN" = false ]; then
+    sed -i "s|tag: \"${CUR_TRAEFIK}\"|tag: \"${LATEST_TRAEFIK}\"|" kube-system/traefik/helmchartconfig.yaml
+    kubectl apply -f kube-system/traefik/helmchartconfig.yaml
+    sleep 5
+    kubectl rollout status deployment/traefik -n kube-system --timeout=300s
+    MODIFIED_FILES+=("kube-system/traefik/helmchartconfig.yaml")
+  fi
+  UPDATED_COMPONENTS+=("traefik: $CUR_TRAEFIK -> $LATEST_TRAEFIK")
+fi
+
+# ------------------------------------------------------------------------------
 # Check If Any Updates Occurred
 # ------------------------------------------------------------------------------
 if [ ${#UPDATED_COMPONENTS[@]} -eq 0 ]; then
@@ -419,6 +456,14 @@ fi
 if [ "$SKIP_HEALTH" = false ]; then
   log_step "Running post-upgrade endpoint health checks"
   WORKER_IP="192.168.2.7"
+
+  # Test Zot Registry via Traefik ingress
+  ZOT_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: registry.ddellspe.dev" "https://${WORKER_IP}/v2/" || true)
+  if [ "$ZOT_CODE" = "200" ]; then
+    log_success "Zot Registry endpoint reachable (HTTP $ZOT_CODE)"
+  else
+    log_warn "Zot Registry endpoint probe returned HTTP $ZOT_CODE"
+  fi
 
   # Test Radar (NodePort/LB 32054)
   RADAR_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://${WORKER_IP}:32054/" || true)
