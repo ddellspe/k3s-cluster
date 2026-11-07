@@ -526,4 +526,3 @@ echo -e "${GREEN}${BOLD}Updated components:${NC}"
 for item in "${UPDATED_COMPONENTS[@]}"; do
   echo -e "  ${GREEN}✓${NC} $item"
 done
-EOF
