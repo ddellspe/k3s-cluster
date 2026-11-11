@@ -34,7 +34,7 @@ spec:
           value: http://prometheus-service.monitoring.svc.cluster.local:9090
         - name: RADAR_ALLOWED_HOSTS
           value: "radar.ddellspe.dev"
-        image: ghcr.io/skyhook-io/radar:1.20.0
+        image: ghcr.io/skyhook-io/radar:1.20.2
         imagePullPolicy: Always
         livenessProbe:
           failureThreshold: 3

@@ -59,7 +59,7 @@ data:
             return data_url
     '''
 
-    pattern = r'def normalize_openai_edit_image_data_url\(data_url: str\) -> str:.*?(?=\ndef get_image_file_item)'
+    pattern = r'def normalize_openai_edit_image_data_url\(data_url: str\) -> str:.*?(?=\ndef (?:get_image_data_url|get_image_file_item))'
     if re.search(pattern, content, re.DOTALL):
         content = re.sub(pattern, NEW_FUNC_BODY.strip() + "\n\n", content, flags=re.DOTALL)
         print("Successfully patched normalize_openai_edit_image_data_url")
