@@ -27,13 +27,13 @@ spec:
         - /bin/bash
         - -c
         - |
-          echo "Starting Gemma 26B (INT4 Strix Halo optimized) vLLM server on port 8000..."
+          echo "Starting Abliterated INT4 Gemma 26B vLLM server on port 8000..."
           EXTRA_ARGS=""
           if [ -f /app/vllm/examples/tool_chat_template_gemma4.jinja ]; then
             EXTRA_ARGS="--chat-template /app/vllm/examples/tool_chat_template_gemma4.jinja"
           fi
           exec python3 -m vllm.entrypoints.openai.api_server \
-            --model jcbtc/Gemma4-26B-CIRU-AMD-STRIX-vLLM \
+            --model /root/.cache/huggingface/gemma-4-26b-abliterated-int4 \
             --served-model-name google/gemma-4-26B-A4B-it google/gemma-4-26b-a4b-it \
             --trust-remote-code \
             --port 8000 \
