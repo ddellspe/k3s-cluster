@@ -19,7 +19,7 @@ spec:
         kubernetes.io/hostname: well
       containers:
       - name: litellm-router
-        image: ghcr.io/berriai/litellm:main-latest
+        image: docker.io/litellm/litellm:v1.109.0
         imagePullPolicy: Always
         args:
         - --config

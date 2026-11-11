@@ -64,6 +64,22 @@ model_list:
     model_info:
       mode: audio_transcription
 
+  - model_name: laya
+    litellm_params:
+      model: typesafe/typed-decisions
+      api_base: http://laya-service.llm:8000
+      api_key: "none"
+    model_info:
+      mode: decisions
+
+  - model_name: typed-decisions
+    litellm_params:
+      model: typesafe/typed-decisions
+      api_base: http://laya-service.llm:8000
+      api_key: "none"
+    model_info:
+      mode: decisions
+
 
 
 router_settings:

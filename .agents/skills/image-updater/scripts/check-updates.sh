@@ -83,6 +83,10 @@ LATEST_ALPINE_K8S=$(fetch_dockerhub_alpine_k8s)
 CUR_TRAEFIK=$(grep -oE 'tag: ".*"' kube-system/traefik/helmchartconfig.yaml | tr -d '"' | awk '{print $2}')
 LATEST_TRAEFIK=$(fetch_dockerhub_traefik)
 
+# 12. LiteLLM Router
+CUR_LITELLM=$(grep -oE 'image: docker.io/litellm/litellm:.*' llm/llm-router/deployment.yaml | awk -F: '{print $3}')
+LATEST_LITELLM=$(fetch_github_latest "berriai/litellm")
+
 print_row() {
   local item="$1"
   local cur="$2"
@@ -114,3 +118,4 @@ print_row "Skyhook Radar" "$CUR_RADAR" "$LATEST_RADAR" "Minor update"
 print_row "System Upgrade Controller" "$CUR_SUC" "$LATEST_SUC" "Patch update"
 print_row "Alpine k8s helper" "$CUR_ALPINE_K8S" "$LATEST_ALPINE_K8S" "Aligns with cluster k8s version"
 print_row "Traefik (HelmChartConfig)" "$CUR_TRAEFIK" "$LATEST_TRAEFIK" "rancher/mirrored-library-traefik"
+print_row "LiteLLM Router" "$CUR_LITELLM" "$LATEST_LITELLM" "AI gateway & router"
