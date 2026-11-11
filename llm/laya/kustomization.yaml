@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: llm
 
 resources:
+  - configmap.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml

@@ -34,7 +34,7 @@ spec:
           from laya.mcp.server import server
           server.run(transport='streamable-http', host='0.0.0.0', port=8005)
           " &
-          exec laya-serve --host 0.0.0.0 --port 8000
+          exec python3 /app/laya-ui/server.py
         env:
         - name: HSA_OVERRIDE_GFX_VERSION
           value: "11.5.1"
@@ -75,6 +75,8 @@ spec:
           name: dev-dri
         - mountPath: /root/.cache/huggingface
           name: hf-cache
+        - mountPath: /app/laya-ui
+          name: laya-ui-volume
         resources:
           requests:
             cpu: "1"
@@ -114,3 +116,6 @@ spec:
         hostPath:
           path: /var/lib/rancher/k3s/storage/hf-cache
           type: DirectoryOrCreate
+      - name: laya-ui-volume
+        configMap:
+          name: laya-ui-config
