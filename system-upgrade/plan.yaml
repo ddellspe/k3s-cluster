@@ -188,7 +188,7 @@ spec:
 
       info "Upgrade complete and fully verified on this node!"
       exit 0
-  version: v1.37.1+k3s1
+  version: v1.37.2+k3s1
 ---
 apiVersion: upgrade.cattle.io/v1
 kind: Plan
@@ -383,4 +383,4 @@ spec:
 
       info "Upgrade complete and fully verified on this node!"
       exit 0
-  version: v1.37.1+k3s1
+  version: v1.37.2+k3s1
