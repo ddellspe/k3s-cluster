@@ -4,6 +4,33 @@ model_list:
       model: hosted_vllm/google/gemma-4-26B-A4B-it
       api_base: http://llm-gemma26b-service.llm:8000/v1
       api_key: "none"
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: true
+    model_info:
+      supports_reasoning: true
+      supports_function_calling: true
+
+  - model_name: google/gemma-4-26b-a4b-it
+    litellm_params:
+      model: hosted_vllm/google/gemma-4-26B-A4B-it
+      api_base: http://llm-gemma26b-service.llm:8000/v1
+      api_key: "none"
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: true
+    model_info:
+      supports_reasoning: true
+      supports_function_calling: true
+
+  - model_name: gemma-4-26b
+    litellm_params:
+      model: hosted_vllm/google/gemma-4-26B-A4B-it
+      api_base: http://llm-gemma26b-service.llm:8000/v1
+      api_key: "none"
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: true
     model_info:
       supports_reasoning: true
       supports_function_calling: true
